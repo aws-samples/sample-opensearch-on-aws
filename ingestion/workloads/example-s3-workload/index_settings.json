@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 2
+  },
+  "mappings": {
+    "properties": {
+      "timestamp": {
+        "type": "date"
+      },
+      "message": {
+        "type": "text"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "processed_at": {
+        "type": "date"
+      },
+      "source_type": {
+        "type": "keyword"
+      }
+    }
+  }
+}

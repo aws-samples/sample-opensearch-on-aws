@@ -1,0 +1,54 @@
+{
+  "version": "2",
+  "osi-load-pipeline": {
+    "source": {
+      "s3": {
+        "acknowledgments": true,
+        "delete_s3_objects_on_read": false,
+        "codec": {
+          "ndjson": {}
+        },
+        "compression": "none",
+        "aws": {
+          "region": "${AWS_REGION}",
+          "sts_role_arn": "${OSI_ROLE_ARN}"
+        },
+        "scan": {
+          "scheduling": {
+            "interval": "PT2M"
+          },
+          "buckets": [
+            {
+              "bucket": {
+                "name": "${SOURCE_BUCKET}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "sink": [
+      {
+        "opensearch": {
+          "hosts": [
+            "https://${OPENSEARCH_ENDPOINT}"
+          ],
+          "index": "osi-load-index",
+          "document_id_field": "osi_load_doc_id",
+          "aws": {
+            "region": "${AWS_REGION}",
+            "sts_role_arn": "${OSI_ROLE_ARN}"
+          },
+          "dlq": {
+            "s3": {
+              "bucket": "${DLQ_BUCKET}",
+              "key_path_prefix": "dlq/",
+              "region": "${AWS_REGION}",
+              "sts_role_arn": "${OSI_ROLE_ARN}"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
