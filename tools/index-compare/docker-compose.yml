@@ -1,0 +1,32 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.5.0
+    container_name: opensearch-test
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "DISABLE_INSTALL_DEMO_CONFIG=true"
+      - "DISABLE_SECURITY_PLUGIN=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - 9201:9200
+      - 9601:9600
+    networks:
+      - opensearch-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  opensearch-data:
+
+networks:
+  opensearch-net:
