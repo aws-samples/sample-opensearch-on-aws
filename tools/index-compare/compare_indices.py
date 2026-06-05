@@ -256,6 +256,15 @@ def create_opensearch_client(cfg: dict) -> OpenSearch:
         "timeout": 60,
     }
 
+    # Use explicitly safe, sanitized values for logging so we never log from
+    # the mixed config object that also carries sensitive fields (e.g. password).
+    safe_host = str(cfg.get("host", "unknown"))
+    if "@" in safe_host and "://" in safe_host:
+        safe_host = "<redacted-host>"
+    safe_port = cfg.get("port")
+    safe_use_ssl = cfg.get("use_ssl")
+    safe_verify_certs = cfg.get("verify_certs")
+
     mode = cfg["auth_mode"]
     if mode == "aws-iam":
         try:
@@ -302,10 +311,10 @@ def create_opensearch_client(cfg: dict) -> OpenSearch:
         info = client.info()
         logger.info(
             "Connected to OpenSearch at %s:%s (ssl=%s, verify_certs=%s) — server version %s",
-            cfg["host"],
-            cfg["port"],
-            cfg["use_ssl"],
-            cfg["verify_certs"],
+            safe_host,
+            safe_port,
+            safe_use_ssl,
+            safe_verify_certs,
             info.get("version", {}).get("number", "unknown"),
         )
         return client
