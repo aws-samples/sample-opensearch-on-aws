@@ -287,11 +287,7 @@ def create_opensearch_client(cfg: dict, password: Optional[str]) -> OpenSearch:
             sys.exit(1)
 
         client_kwargs["http_auth"] = AWSV4SignerAuth(credentials, region, cfg["aws_service"])
-        logger.info(
-            "Using AWS SigV4 (service='%s') signing for region %s",
-            cfg["aws_service"],
-            region,
-        )
+        logger.info("Using AWS SigV4 signing")
 
     elif mode == "basic":
         if not (cfg["user"] and password):
