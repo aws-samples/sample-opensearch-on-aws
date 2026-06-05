@@ -193,7 +193,6 @@ def resolve_config(args: argparse.Namespace) -> dict:
         "host": args.host or env("OS_HOST", "localhost"),
         "port": args.port if args.port is not None else parse_int_env("OS_PORT", 9200),
         "user": args.user or env("OS_USER"),
-        "password": resolve_password(args),
         "aws_region": args.aws_region or env("AWS_REGION") or env("OS_AWS_REGION"),
         "aws_service": args.aws_service or env("OS_AWS_SERVICE", "es"),
         "scroll_size": args.scroll_size
@@ -246,7 +245,7 @@ def resolve_config(args: argparse.Namespace) -> dict:
     return cfg
 
 
-def create_opensearch_client(cfg: dict) -> OpenSearch:
+def create_opensearch_client(cfg: dict, password: Optional[str]) -> OpenSearch:
     client_kwargs = {
         "hosts": [{"host": cfg["host"], "port": cfg["port"]}],
         "use_ssl": cfg["use_ssl"],
@@ -295,12 +294,12 @@ def create_opensearch_client(cfg: dict) -> OpenSearch:
         )
 
     elif mode == "basic":
-        if not (cfg["user"] and cfg["password"]):
+        if not (cfg["user"] and password):
             logger.error(
                 "basic auth-mode requires --user plus --password / --password-stdin / OS_PASSWORD."
             )
             sys.exit(2)
-        client_kwargs["http_auth"] = (cfg["user"], cfg["password"])
+        client_kwargs["http_auth"] = (cfg["user"], password)
         logger.info("Using HTTP basic authentication")
 
     else:
@@ -401,8 +400,9 @@ def main():
     args = parse_arguments()
     load_dotenv_if_present(args.env_file)
     cfg = resolve_config(args)
+    password = resolve_password(args)
 
-    client = create_opensearch_client(cfg)
+    client = create_opensearch_client(cfg, password)
 
     logger.info("Retrieving document IDs from source index...")
     source_ids = get_all_document_ids(
