@@ -292,7 +292,7 @@ def create_opensearch_client(cfg: dict) -> OpenSearch:
             )
             sys.exit(2)
         client_kwargs["http_auth"] = (cfg["user"], cfg["password"])
-        logger.info("Using HTTP basic auth as user '%s'", cfg["user"])
+        logger.info("Using HTTP basic authentication")
 
     else:
         logger.info("Using no authentication (local/dev mode)")
