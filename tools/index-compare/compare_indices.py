@@ -336,7 +336,7 @@ def get_all_document_ids(
 
     query = {"query": {"match_all": {}}, "_source": False}
 
-    logger.info("Fetching document IDs from index '%s'", index_name)
+    logger.info("Fetching document IDs from index")
     start_time = time.time()
 
     resp = client.search(body=query, index=index_name, scroll=scroll_time, size=scroll_size)
@@ -348,9 +348,8 @@ def get_all_document_ids(
         last_logged_at = 0
         log_every = max(scroll_size, 10000)
         logger.info(
-            "Retrieved initial batch of %d document IDs from '%s'",
+            "Retrieved initial batch of %d document IDs",
             len(document_ids),
-            index_name,
         )
 
         while hits:
@@ -362,7 +361,7 @@ def get_all_document_ids(
             document_ids.update(hit["_id"] for hit in hits)
             if len(document_ids) - last_logged_at >= log_every:
                 last_logged_at = len(document_ids)
-                logger.info("Processed %d documents from '%s'", last_logged_at, index_name)
+                logger.info("Processed %d documents", last_logged_at)
     except NotFoundError as e:
         logger.error(
             "Search failed against '%s'. The scroll context may have expired "
