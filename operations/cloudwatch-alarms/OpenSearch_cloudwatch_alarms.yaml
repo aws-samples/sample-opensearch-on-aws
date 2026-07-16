@@ -689,7 +689,7 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Threshold: 10
       EvaluationPeriods: 1
-      TreatMissingData: missing
+      TreatMissingData: notBreaching
       OKActions:
         - !Ref SNSTopic
       AlarmActions:
