@@ -651,9 +651,10 @@ Resources:
         5xx errors are >= 10% of total OpenSearch requests. One or more data
         nodes might be overloaded, or requests are failing to complete within
         the idle timeout period. Consider switching to larger instance types
-        or adding more nodes.
+        or adding more nodes. This alarm only evaluates when there are more
+        than 10 requests in a period to avoid false positives on idle domains.
       Metrics:
-        - Expression: '(m1/m2)*100'
+        - Expression: 'IF(m2 > 10, (m1/m2)*100, 0)'
           Id: errorRate
           Label: '5xx Error Rate (%)'
           ReturnData: true

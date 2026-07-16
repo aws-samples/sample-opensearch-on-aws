@@ -264,7 +264,7 @@ This template uses a **two-tier approach** with the formula `min(percentage, cap
 | KMSKeyError | >= 1 for 1 min, 1 time | KMS encryption key has been disabled. |
 | KMSKeyInaccessible | >= 1 for 1 min, 1 time | KMS key has been deleted or grants revoked (domain unrecoverable). |
 | Shards.active | >= threshold for 1 min, 1 time | Active shards exceed recommended limit (25 per GiB heap per node). |
-| 5xx Error Rate | >= 10% of OpenSearchRequests | Data nodes may be overloaded or requests timing out. |
+| 5xx Error Rate | >= 10% of OpenSearchRequests (when requests > 10/min) | Data nodes may be overloaded or requests timing out. |
 | MasterReachableFromNode | maximum < 1 for 5 min, 1 time | Master node stopped or is unreachable. |
 | ThreadpoolWriteQueue | average >= 100 for 1 min, 1 time | High indexing concurrency. |
 | ThreadpoolSearchQueue (avg) | average >= 500 for 1 min, 1 time | High search concurrency. |
@@ -275,6 +275,8 @@ This template uses a **two-tier approach** with the formula `min(percentage, cap
 > **Note:** The `KMSKeyError` and `KMSKeyInaccessible` alarms will show "Insufficient Data" — this is expected. These metrics only appear when your domain encounters a KMS key problem.
 
 > **Note:** The 5xx Error Rate alarm uses the `OpenSearchRequests` metric, which applies to domains running OpenSearch engine (1.x, 2.x). If your domain runs a legacy Elasticsearch engine (5.x, 6.x, 7.x), change `OpenSearchRequests` to `ElasticsearchRequests` in the template.
+
+> **Note:** The 5xx alarm includes a low-traffic guard (`IF(m2 > 10, ...)`). On idle or low-traffic domains, a single internal request can produce a 100% error rate, causing alarm flapping. The guard only evaluates the error rate when there are more than 10 requests per minute.
 
 ---
 
