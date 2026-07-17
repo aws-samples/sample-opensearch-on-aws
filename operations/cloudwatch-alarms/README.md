@@ -90,6 +90,8 @@ The script displays your AWS account, region, and identity at startup so you can
 <details>
 <summary>Example IAM policy (click to expand)</summary>
 
+> **Note:** The `AlarmPermissions` statement uses `alarm:*` because alarm names are based on your domain name (e.g., `my-domain-ClusterStatus-red`). For tighter scoping, replace `*` with your domain name pattern: `arn:aws:cloudwatch:*:*:alarm:YOUR-DOMAIN-NAME-*`.
+
 ```json
 {
   "Version": "2012-10-17",
@@ -117,18 +119,25 @@ The script displays your AWS account, region, and identity at startup so you can
       "Resource": "arn:aws:cloudformation:*:*:stack/opensearch-alarms-*/*"
     },
     {
-      "Sid": "AlarmAndNotificationPermissions",
+      "Sid": "AlarmPermissions",
       "Effect": "Allow",
       "Action": [
         "cloudwatch:PutMetricAlarm",
         "cloudwatch:DeleteAlarms",
-        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "arn:aws:cloudwatch:*:*:alarm:*"
+    },
+    {
+      "Sid": "SNSPermissions",
+      "Effect": "Allow",
+      "Action": [
         "sns:CreateTopic",
         "sns:DeleteTopic",
         "sns:Subscribe",
         "sns:Unsubscribe"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:sns:*:*:opensearch-alarms-*"
     }
   ]
 }

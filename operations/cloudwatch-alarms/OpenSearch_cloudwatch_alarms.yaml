@@ -138,6 +138,7 @@ Resources:
     Properties:
       DisplayName: !Sub 'OpenSearch Alerts - ${OpenSearchDomainName}'
       TopicName: !Sub 'opensearch-alarms-${OpenSearchDomainName}'
+      KmsMasterKeyId: 'alias/aws/sns'
 
   SNSSubscription:
     Type: AWS::SNS::Subscription
