@@ -1,0 +1,927 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Deploys recommended Amazon CloudWatch alarms for an Amazon OpenSearch Service
+  domain with SNS email notifications. Based on AWS documentation best practices:
+  https://docs.aws.amazon.com/opensearch-service/latest/developerguide/cloudwatch-alarms.html
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: OpenSearch Domain
+        Parameters:
+          - OpenSearchDomainName
+          - NumberOfDataNodes
+          - TotalNumberOfNodes
+          - ShardsThreshold
+          - FreeStorageSpaceWarningThreshold
+          - FreeStorageSpaceCriticalThreshold
+          - HasDedicatedMasterNodes
+          - IsOldGenDataNodes
+          - IsOldGenMasterNodes
+      - Label:
+          default: Notifications
+        Parameters:
+          - Email
+    ParameterLabels:
+      OpenSearchDomainName:
+        default: Domain Name
+      NumberOfDataNodes:
+        default: Number of Data Nodes
+      TotalNumberOfNodes:
+        default: Total Number of Nodes (data + master + warm)
+      ShardsThreshold:
+        default: Max Active Shards (25 x heap GiB x nodes)
+      FreeStorageSpaceWarningThreshold:
+        default: Free Storage Space - Warning Threshold (MiB)
+      FreeStorageSpaceCriticalThreshold:
+        default: Free Storage Space - Critical Threshold (MiB)
+      HasDedicatedMasterNodes:
+        default: Does the domain have dedicated master nodes?
+      IsOldGenDataNodes:
+        default: Are data nodes previous-generation instances?
+      IsOldGenMasterNodes:
+        default: Are master nodes previous-generation instances?
+      Email:
+        default: Notification Email
+
+Parameters:
+  OpenSearchDomainName:
+    Type: String
+    Description: Name of the existing Amazon OpenSearch Service domain to monitor
+    AllowedPattern: '[a-z][a-z0-9\-]{2,27}'
+    ConstraintDescription: >-
+      3-28 characters, lowercase letters, numbers, and hyphens, starting with a letter
+
+  Email:
+    Type: String
+    Description: Email address to receive alarm notifications (must confirm subscription)
+    AllowedPattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    ConstraintDescription: Must be a valid email address
+
+  NumberOfDataNodes:
+    Type: Number
+    Description: Number of data nodes in your OpenSearch domain
+    MinValue: 1
+    Default: 3
+
+  TotalNumberOfNodes:
+    Type: Number
+    Description: >-
+      Total number of nodes in your OpenSearch domain (data + dedicated master + warm).
+      The Nodes metric reports all node types. Used for the Nodes alarm threshold.
+    MinValue: 1
+    Default: 3
+
+  ShardsThreshold:
+    Type: Number
+    Description: >-
+      Maximum recommended active shards. Formula: 25 x JVM heap (GiB) x data nodes.
+      JVM heap = min(instance RAM / 2, 32). Examples:
+      - 3x r6g.2xlarge (64 GiB RAM, 32 GiB heap): 25 x 32 x 3 = 2400
+      - 3x m6g.xlarge (16 GiB RAM, 8 GiB heap): 25 x 8 x 3 = 600
+      - 6x r6g.xlarge (32 GiB RAM, 16 GiB heap): 25 x 16 x 6 = 2400
+    MinValue: 25
+    Default: 2400
+
+  FreeStorageSpaceWarningThreshold:
+    Type: Number
+    Description: >-
+      WARNING-level free storage space threshold in MiB. Use min(25% of disk, 25 GiB)
+      whichever is less. Examples: 10 GiB disk = 2560 MiB (25%), 100 GiB disk = 25600 MiB (25%),
+      500 GiB disk = 25600 MiB (capped at 25 GiB).
+    MinValue: 512
+    Default: 20480
+
+  FreeStorageSpaceCriticalThreshold:
+    Type: Number
+    Description: >-
+      CRITICAL-level free storage space threshold in MiB. Use min(20% of disk, 20 GiB)
+      whichever is less. Immediate action required when this fires. Examples:
+      10 GiB disk = 2048 MiB (20%), 100 GiB disk = 20480 MiB (20%),
+      500 GiB disk = 20480 MiB (capped at 20 GiB).
+    MinValue: 256
+    Default: 10240
+
+  IsOldGenDataNodes:
+    Type: String
+    Description: >-
+      Select true if data nodes use previous-generation instances (m3, m4, r3, r4, c4, i2, t2).
+      Current-gen uses JVMMemoryPressure at 95%, old-gen uses OldGenJVMMemoryPressure at 80%.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+
+  IsOldGenMasterNodes:
+    Type: String
+    Description: >-
+      Select true if dedicated master nodes use previous-generation instances (m3, m4, r3, r4, c4, i2, t2).
+      Current-gen uses MasterJVMMemoryPressure at 95%, old-gen uses MasterOldGenJVMMemoryPressure at 80%.
+      Ignored if HasDedicatedMasterNodes is false.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+
+  HasDedicatedMasterNodes:
+    Type: String
+    Description: >-
+      Select true if your domain has dedicated master nodes. If false, master node
+      alarms (MasterCPUUtilization, MasterJVMMemoryPressure, MasterOldGenJVMMemoryPressure,
+      MasterReachableFromNode) will not be created.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+
+Conditions:
+  OldGenDataNodes: !Equals [!Ref IsOldGenDataNodes, 'true']
+  OldGenMasterNodes: !Equals [!Ref IsOldGenMasterNodes, 'true']
+  DeployMasterAlarms: !Equals [!Ref HasDedicatedMasterNodes, 'true']
+
+Resources:
+  # =============================================
+  # SNS Topic & Subscription
+  # =============================================
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub 'OpenSearch Alerts - ${OpenSearchDomainName}'
+      TopicName: !Sub 'opensearch-alarms-${OpenSearchDomainName}'
+      KmsMasterKeyId: 'alias/aws/sns'
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SNSTopic
+      Protocol: email
+      Endpoint: !Ref Email
+
+  # =============================================
+  # CloudWatch Alarms
+  # =============================================
+
+  # -----------------
+  # ClusterStatus.red
+  # maximum >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  ClusterStatusRed:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ClusterStatus-red'
+      AlarmDescription: >-
+        At least one primary shard and its replicas are not allocated to a node.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-red-cluster-status
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'ClusterStatus.red'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ClusterStatus.yellow
+  # maximum >= 1 for 1 minute, 5 consecutive times
+  # -----------------
+  ClusterStatusYellow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ClusterStatus-yellow'
+      AlarmDescription: >-
+        At least one replica shard is not allocated to a node.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-yellow-cluster-status
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'ClusterStatus.yellow'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 60
+      EvaluationPeriods: 5
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # FreeStorageSpace (WARNING)
+  # minimum <= warning threshold for 1 minute, 1 consecutive time
+  # Early warning — gives time to plan (resize, ISM, delete old indexes)
+  # AWS recommends 25% of storage per node
+  # -----------------
+  FreeStorageSpaceWarning:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-FreeStorageSpace-warning'
+      AlarmDescription: !Sub >-
+        WARNING: A node in your cluster is running low on free storage space
+        (below ${FreeStorageSpaceWarningThreshold} MiB). Plan capacity action now:
+        delete old indexes, use ISM policies, or resize your EBS volumes.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-watermark
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Minimum
+      MetricName: 'FreeStorageSpace'
+      ComparisonOperator: LessThanOrEqualToThreshold
+      Threshold: !Ref FreeStorageSpaceWarningThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # FreeStorageSpace (CRITICAL)
+  # minimum <= critical threshold for 1 minute, 1 consecutive time
+  # Absolute floor — act immediately or writes will be blocked
+  # -----------------
+  FreeStorageSpaceCritical:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-FreeStorageSpace-critical'
+      AlarmDescription: !Sub >-
+        CRITICAL: A node in your cluster has dangerously low free storage space
+        (below ${FreeStorageSpaceCriticalThreshold} MiB). Immediate action required
+        to prevent write blocks. OpenSearch will stop shard allocation and may block
+        writes entirely at this level.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-watermark
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Minimum
+      MetricName: 'FreeStorageSpace'
+      ComparisonOperator: LessThanOrEqualToThreshold
+      Threshold: !Ref FreeStorageSpaceCriticalThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ClusterIndexWritesBlocked
+  # >= 1 for 5 minutes, 1 consecutive time
+  # -----------------
+  ClusterIndexWritesBlocked:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ClusterIndexWritesBlocked'
+      AlarmDescription: >-
+        Your cluster is blocking write requests. This is often caused by
+        insufficient disk space or memory pressure.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#troubleshooting-cluster-block
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'ClusterIndexWritesBlocked'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 300
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # Nodes
+  # minimum < x for 1 day, 1 consecutive time
+  # -----------------
+  Nodes:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-Nodes-missing'
+      AlarmDescription: !Sub >-
+        At least one node in your cluster has been unreachable for one day.
+        Expected node count: ${TotalNumberOfNodes} (data + master + warm).
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-failed-cluster-nodes
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Minimum
+      MetricName: 'Nodes'
+      ComparisonOperator: LessThanThreshold
+      Threshold: !Ref TotalNumberOfNodes
+      Period: 86400
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # AutomatedSnapshotFailure
+  # maximum >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  AutomatedSnapshotFailure:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-AutomatedSnapshotFailure'
+      AlarmDescription: >-
+        An automated snapshot failed. This failure is often the result of a
+        red cluster health status.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'AutomatedSnapshotFailure'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # CPUUtilization (data nodes)
+  # maximum >= 80% for 15 minutes, 3 consecutive times
+  # -----------------
+  CPUUtilization:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-CPUUtilization-high'
+      AlarmDescription: >-
+        Sustained high CPU utilization on data nodes. Consider using larger
+        instance types or adding instances.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'CPUUtilization'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 80
+      Period: 900
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # JVMMemoryPressure (data nodes)
+  # maximum >= 95% for 1 minute, 3 consecutive times (current gen)
+  # maximum >= 80% for 1 minute, 3 consecutive times (old gen via OldGenJVMMemoryPressure)
+  # -----------------
+  JVMMemoryPressure:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-JVMMemoryPressure-high'
+      AlarmDescription: >-
+        JVM memory pressure on data nodes is high. The cluster could encounter
+        out of memory errors if usage increases. Consider scaling vertically.
+        OpenSearch uses half of instance RAM for heap (up to 32 GiB).
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'JVMMemoryPressure'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: !If [OldGenDataNodes, 80, 95]
+      Period: 60
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # OldGenJVMMemoryPressure (data nodes)
+  # maximum >= 80% for 1 minute, 3 consecutive times
+  # -----------------
+  OldGenJVMMemoryPressure:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-OldGenJVMMemoryPressure-high'
+      AlarmDescription: >-
+        Old generation JVM memory pressure on data nodes is high. Provides a
+        more accurate picture of heap usage for current-generation instance types.
+        Consider scaling vertically.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'OldGenJVMMemoryPressure'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 80
+      Period: 60
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # MasterCPUUtilization
+  # maximum >= 50% for 15 minutes, 3 consecutive times
+  # -----------------
+  MasterCPUUtilization:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DeployMasterAlarms
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-MasterCPUUtilization-high'
+      AlarmDescription: >-
+        Dedicated master node CPU utilization is high. Consider using larger
+        instance types. Master nodes should have lower CPU usage than data nodes
+        due to their role in cluster stability and blue/green deployments.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'MasterCPUUtilization'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 50
+      Period: 900
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # MasterJVMMemoryPressure
+  # maximum >= 95% for 1 minute, 3 consecutive times (current gen)
+  # -----------------
+  MasterJVMMemoryPressure:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DeployMasterAlarms
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-MasterJVMMemoryPressure-high'
+      AlarmDescription: >-
+        JVM memory pressure on master nodes is high.
+        Consider using larger instance types for dedicated master nodes.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'MasterJVMMemoryPressure'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: !If [OldGenMasterNodes, 80, 95]
+      Period: 60
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # MasterOldGenJVMMemoryPressure
+  # maximum >= 80% for 1 minute, 3 consecutive times
+  # -----------------
+  MasterOldGenJVMMemoryPressure:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DeployMasterAlarms
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-MasterOldGenJVMMemoryPressure-high'
+      AlarmDescription: >-
+        Old generation JVM memory pressure on master nodes is high.
+        Consider using larger instance types for dedicated master nodes.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'MasterOldGenJVMMemoryPressure'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 80
+      Period: 60
+      EvaluationPeriods: 3
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # KMSKeyError
+  # >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  KMSKeyError:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-KMSKeyError'
+      AlarmDescription: >-
+        The KMS encryption key used to encrypt data at rest has been disabled.
+        Re-enable it to restore normal operations.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/encryption-at-rest.html
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'KMSKeyError'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # KMSKeyInaccessible
+  # >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  KMSKeyInaccessible:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-KMSKeyInaccessible'
+      AlarmDescription: >-
+        The KMS encryption key has been deleted or has revoked its grants to
+        OpenSearch Service. Domains in this state cannot be recovered. If you
+        have a manual snapshot, you can use it to migrate to a new domain.
+        See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/encryption-at-rest.html
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'KMSKeyInaccessible'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # Shards.active
+  # >= (25 x JVM heap GiB x number of data nodes) for 1 minute, 1 consecutive time
+  # -----------------
+  ShardsActive:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ShardsActive-too-high'
+      AlarmDescription: !Sub >-
+        Active shards exceed the recommended limit of 25 shards per GiB of
+        Java heap per data node. Threshold: ${ShardsThreshold}.
+        Consider using ISM to remove indexes once they reach a specific age.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'Shards.active'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: !Ref ShardsThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # 5xx Errors
+  # >= 10% of OpenSearchRequests
+  # Uses metric math to calculate percentage
+  # NOTE: This alarm uses the 'OpenSearchRequests' metric which applies to domains
+  # running OpenSearch engine (1.x, 2.x). If your domain runs a legacy Elasticsearch
+  # engine (5.x, 6.x, 7.x), change 'OpenSearchRequests' to 'ElasticsearchRequests'.
+  # -----------------
+  FivexxErrorRate:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-5xx-ErrorRate-high'
+      AlarmDescription: >-
+        5xx errors are >= 10% of total OpenSearch requests. One or more data
+        nodes might be overloaded, or requests are failing to complete within
+        the idle timeout period. Consider switching to larger instance types
+        or adding more nodes. This alarm only evaluates when there are more
+        than 10 requests in a period to avoid false positives on idle domains.
+      Metrics:
+        - Expression: 'IF(m2 > 10, (m1/m2)*100, 0)'
+          Id: errorRate
+          Label: '5xx Error Rate (%)'
+          ReturnData: true
+        - Id: m1
+          Label: '5xx Errors'
+          MetricStat:
+            Metric:
+              Namespace: 'AWS/ES'
+              MetricName: '5xx'
+              Dimensions:
+                - Name: ClientId
+                  Value: !Ref AWS::AccountId
+                - Name: DomainName
+                  Value: !Ref OpenSearchDomainName
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+        - Id: m2
+          Label: 'OpenSearchRequests'
+          MetricStat:
+            Metric:
+              Namespace: 'AWS/ES'
+              MetricName: 'OpenSearchRequests'
+              Dimensions:
+                - Name: ClientId
+                  Value: !Ref AWS::AccountId
+                - Name: DomainName
+                  Value: !Ref OpenSearchDomainName
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 10
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # MasterReachableFromNode
+  # maximum < 1 for 5 minutes, 1 consecutive time
+  # -----------------
+  MasterReachableFromNode:
+    Type: AWS::CloudWatch::Alarm
+    Condition: DeployMasterAlarms
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-MasterReachableFromNode'
+      AlarmDescription: >-
+        The master node stopped or is unreachable. These failures are usually
+        the result of a network connectivity issue or an AWS dependency problem.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'MasterReachableFromNode'
+      ComparisonOperator: LessThanThreshold
+      Threshold: 1
+      Period: 300
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ThreadpoolWriteQueue
+  # average >= 100 for 1 minute, 1 consecutive time
+  # -----------------
+  ThreadpoolWriteQueue:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ThreadpoolWriteQueue-high'
+      AlarmDescription: >-
+        The cluster is experiencing high indexing concurrency. Review and
+        control indexing requests, or increase cluster resources.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Average
+      MetricName: 'ThreadpoolWriteQueue'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 100
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ThreadpoolSearchQueue (average >= 500)
+  # average >= 500 for 1 minute, 1 consecutive time
+  # -----------------
+  ThreadpoolSearchQueueAverage:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ThreadpoolSearchQueue-avg-high'
+      AlarmDescription: >-
+        The cluster is experiencing high search concurrency (average queue >= 500).
+        Consider scaling your cluster. You can also increase the search queue
+        size, but increasing it excessively can cause out of memory errors.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Average
+      MetricName: 'ThreadpoolSearchQueue'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 500
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ThreadpoolSearchQueue (maximum >= 5000)
+  # maximum >= 5000 for 1 minute, 1 consecutive time
+  # -----------------
+  ThreadpoolSearchQueueMax:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ThreadpoolSearchQueue-max-high'
+      AlarmDescription: >-
+        The cluster search queue has spiked to critical levels (max >= 5000).
+        Scale your cluster immediately.
+      Namespace: 'AWS/ES'
+      Dimensions:
+        - Name: ClientId
+          Value: !Ref AWS::AccountId
+        - Name: DomainName
+          Value: !Ref OpenSearchDomainName
+      Statistic: Maximum
+      MetricName: 'ThreadpoolSearchQueue'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 5000
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ThreadpoolWriteRejected (using DIFF math expression)
+  # Increase in SUM >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  ThreadpoolWriteRejected:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ThreadpoolWriteRejected-increasing'
+      AlarmDescription: >-
+        Write requests are being rejected. The cluster cannot keep up with
+        indexing load. Consider scaling or reducing write throughput.
+      Metrics:
+        - Expression: 'DIFF(writeRejected)'
+          Id: diffWriteRejected
+          Label: 'Increase in ThreadpoolWriteRejected'
+          ReturnData: true
+        - Id: writeRejected
+          Label: 'ThreadpoolWriteRejected'
+          MetricStat:
+            Metric:
+              Namespace: 'AWS/ES'
+              MetricName: 'ThreadpoolWriteRejected'
+              Dimensions:
+                - Name: ClientId
+                  Value: !Ref AWS::AccountId
+                - Name: DomainName
+                  Value: !Ref OpenSearchDomainName
+            Period: 60
+            Stat: Sum
+            Unit: Count
+          ReturnData: false
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+  # -----------------
+  # ThreadpoolSearchRejected (using DIFF math expression)
+  # Increase in SUM >= 1 for 1 minute, 1 consecutive time
+  # -----------------
+  ThreadpoolSearchRejected:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${OpenSearchDomainName}-ThreadpoolSearchRejected-increasing'
+      AlarmDescription: >-
+        Search requests are being rejected. The cluster cannot keep up with
+        search load. Consider scaling or optimizing queries.
+      Metrics:
+        - Expression: 'DIFF(searchRejected)'
+          Id: diffSearchRejected
+          Label: 'Increase in ThreadpoolSearchRejected'
+          ReturnData: true
+        - Id: searchRejected
+          Label: 'ThreadpoolSearchRejected'
+          MetricStat:
+            Metric:
+              Namespace: 'AWS/ES'
+              MetricName: 'ThreadpoolSearchRejected'
+              Dimensions:
+                - Name: ClientId
+                  Value: !Ref AWS::AccountId
+                - Name: DomainName
+                  Value: !Ref OpenSearchDomainName
+            Period: 60
+            Stat: Sum
+            Unit: Count
+          ReturnData: false
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: missing
+      OKActions:
+        - !Ref SNSTopic
+      AlarmActions:
+        - !Ref SNSTopic
+
+Outputs:
+  SNSTopicArn:
+    Description: ARN of the SNS topic for alarm notifications
+    Value: !Ref SNSTopic
+
+  ShardsThresholdOutput:
+    Description: Configured maximum recommended active shards
+    Value: !Ref ShardsThreshold
+
+  FreeStorageSpaceWarningThresholdOutput:
+    Description: Configured free storage space warning threshold (MiB)
+    Value: !Ref FreeStorageSpaceWarningThreshold
+
+  FreeStorageSpaceCriticalThresholdOutput:
+    Description: Configured free storage space critical threshold (MiB)
+    Value: !Ref FreeStorageSpaceCriticalThreshold
+
+  AlarmCount:
+    Description: Total number of CloudWatch alarms created
+    Value: !If [DeployMasterAlarms, '23', '19']
