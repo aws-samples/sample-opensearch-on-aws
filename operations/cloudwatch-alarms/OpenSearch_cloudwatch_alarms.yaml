@@ -12,6 +12,7 @@ Metadata:
         Parameters:
           - OpenSearchDomainName
           - NumberOfDataNodes
+          - TotalNumberOfNodes
           - ShardsThreshold
           - FreeStorageSpaceWarningThreshold
           - FreeStorageSpaceCriticalThreshold
@@ -27,6 +28,8 @@ Metadata:
         default: Domain Name
       NumberOfDataNodes:
         default: Number of Data Nodes
+      TotalNumberOfNodes:
+        default: Total Number of Nodes (data + master + warm)
       ShardsThreshold:
         default: Max Active Shards (25 x heap GiB x nodes)
       FreeStorageSpaceWarningThreshold:
@@ -59,6 +62,14 @@ Parameters:
   NumberOfDataNodes:
     Type: Number
     Description: Number of data nodes in your OpenSearch domain
+    MinValue: 1
+    Default: 3
+
+  TotalNumberOfNodes:
+    Type: Number
+    Description: >-
+      Total number of nodes in your OpenSearch domain (data + dedicated master + warm).
+      The Nodes metric reports all node types. Used for the Nodes alarm threshold.
     MinValue: 1
     Default: 3
 
@@ -315,7 +326,7 @@ Resources:
       AlarmName: !Sub '${OpenSearchDomainName}-Nodes-missing'
       AlarmDescription: !Sub >-
         At least one node in your cluster has been unreachable for one day.
-        Expected node count: ${NumberOfDataNodes}.
+        Expected node count: ${TotalNumberOfNodes} (data + master + warm).
         See: https://docs.aws.amazon.com/opensearch-service/latest/developerguide/handling-errors.html#handling-errors-failed-cluster-nodes
       Namespace: 'AWS/ES'
       Dimensions:
@@ -326,7 +337,7 @@ Resources:
       Statistic: Minimum
       MetricName: 'Nodes'
       ComparisonOperator: LessThanThreshold
-      Threshold: !Ref NumberOfDataNodes
+      Threshold: !Ref TotalNumberOfNodes
       Period: 86400
       EvaluationPeriods: 1
       TreatMissingData: missing
@@ -913,4 +924,4 @@ Outputs:
 
   AlarmCount:
     Description: Total number of CloudWatch alarms created
-    Value: '23'
+    Value: !If [DeployMasterAlarms, '23', '19']

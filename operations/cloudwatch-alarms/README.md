@@ -176,6 +176,7 @@ aws cloudformation create-stack \
     ParameterKey=OpenSearchDomainName,ParameterValue=my-domain \
     ParameterKey=Email,ParameterValue=alerts@example.com \
     ParameterKey=NumberOfDataNodes,ParameterValue=3 \
+    ParameterKey=TotalNumberOfNodes,ParameterValue=6 \
     ParameterKey=ShardsThreshold,ParameterValue=2400 \
     ParameterKey=FreeStorageSpaceWarningThreshold,ParameterValue=25600 \
     ParameterKey=FreeStorageSpaceCriticalThreshold,ParameterValue=10240 \
@@ -202,6 +203,7 @@ aws cloudformation create-stack \
 | `OpenSearchDomainName` | Your OpenSearch domain name | *(required)* |
 | `Email` | Where to send alarm notifications | *(required)* |
 | `NumberOfDataNodes` | Number of data nodes in your cluster | `3` |
+| `TotalNumberOfNodes` | Total nodes in cluster (data + master + warm). The Nodes metric reports all node types. | `3` |
 | `ShardsThreshold` | Max active shards (see calculator below) | `2400` |
 | `FreeStorageSpaceWarningThreshold` | WARNING: min(25% of disk, 25 GiB) in MiB — early alert to plan action | `20480` |
 | `FreeStorageSpaceCriticalThreshold` | CRITICAL: min(20% of disk, 20 GiB) in MiB — act immediately | `10240` |
@@ -262,7 +264,7 @@ This template uses a **two-tier approach** with the formula `min(percentage, cap
 | FreeStorageSpace (warning) | minimum <= warning threshold for 1 min, 1 time | Early warning — a node is running low on storage. Plan capacity action. |
 | FreeStorageSpace (critical) | minimum <= critical threshold for 1 min, 1 time | Immediate action required — storage dangerously low, writes may be blocked. |
 | ClusterIndexWritesBlocked | >= 1 for 5 min, 1 time | Your cluster is blocking write requests. |
-| Nodes | minimum < node count for 1 day, 1 time | At least one node has been unreachable within one day. |
+| Nodes | minimum < total node count for 1 day, 1 time | At least one node (data, master, or warm) has been unreachable within one day. |
 | AutomatedSnapshotFailure | maximum >= 1 for 1 min, 1 time | An automated snapshot failed (often caused by red cluster status). |
 | CPUUtilization | maximum >= 80% for 15 min, 3 times | Sustained high CPU utilization on data nodes. |
 | JVMMemoryPressure | maximum >= 95% (or 80% old-gen) for 1 min, 3 times | JVM memory pressure on data nodes is high. |

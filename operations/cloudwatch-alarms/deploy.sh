@@ -87,8 +87,10 @@ ACCOUNT_ID=$(echo "$CALLER_IDENTITY" | python3 -c "import sys,json; print(json.l
 CALLER_ARN=$(echo "$CALLER_IDENTITY" | python3 -c "import sys,json; print(json.load(sys.stdin)['Arn'])")
 
 # Determine region
-CURRENT_REGION=$($AWS_CMD configure get region 2>/dev/null || echo "")
-[ -n "$REGION" ] && CURRENT_REGION="$REGION"
+CURRENT_REGION="${REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}"
+if [ -z "$CURRENT_REGION" ]; then
+    CURRENT_REGION=$($AWS_CMD configure get region 2>/dev/null || echo "")
+fi
 if [ -z "$CURRENT_REGION" ]; then
     echo -e "${RED}Error: No AWS region configured.${NC}"
     echo ""
@@ -169,6 +171,9 @@ DATA_INSTANCE_TYPE=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(
 DATA_INSTANCE_COUNT=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('InstanceCount',3))")
 MASTER_ENABLED=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('DedicatedMasterEnabled',False))")
 MASTER_TYPE=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('DedicatedMasterType',''))")
+MASTER_COUNT=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('DedicatedMasterCount',0))")
+WARM_ENABLED=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('WarmEnabled',False))")
+WARM_COUNT=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ClusterConfig',{}).get('WarmCount',0))")
 EBS_VOLUME_SIZE=$(echo "$DOMAIN_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('EBSOptions',{}).get('VolumeSize',100))")
 
 # Get instance memory via EC2 API
@@ -208,6 +213,16 @@ if [ "$MASTER_ENABLED" = "True" ]; then
     HAS_MASTER_NODES="true"
 fi
 
+# Compute total node count (data + master + warm)
+# The Nodes metric reports all node types in the cluster
+TOTAL_NODES=$DATA_INSTANCE_COUNT
+if [ "$MASTER_ENABLED" = "True" ] && [ "$MASTER_COUNT" -gt 0 ]; then
+    TOTAL_NODES=$((TOTAL_NODES + MASTER_COUNT))
+fi
+if [ "$WARM_ENABLED" = "True" ] && [ "$WARM_COUNT" -gt 0 ]; then
+    TOTAL_NODES=$((TOTAL_NODES + WARM_COUNT))
+fi
+
 # Detect old-gen instances
 OLD_GEN_DATA="false"
 OLD_GEN_MASTER="false"
@@ -231,6 +246,7 @@ echo -e "  Shards threshold:        ${GREEN}${SHARDS_THRESHOLD}${NC} (25 x ${HEA
 echo -e "  Free storage warning:    ${GREEN}${STORAGE_WARNING_MIB} MiB${NC} (min(25% of ${EBS_VOLUME_SIZE} GiB, 25 GiB))"
 echo -e "  Free storage critical:   ${GREEN}${STORAGE_CRITICAL_MIB} MiB${NC} (min(20% of ${EBS_VOLUME_SIZE} GiB, 20 GiB))"
 echo -e "  Dedicated master nodes:  ${GREEN}${HAS_MASTER_NODES}${NC}"
+echo -e "  Total nodes (for alarm): ${GREEN}${TOTAL_NODES}${NC} (data: ${DATA_INSTANCE_COUNT}$([ "$MASTER_ENABLED" = "True" ] && echo ", master: ${MASTER_COUNT}")$([ "$WARM_ENABLED" = "True" ] && echo ", warm: ${WARM_COUNT}"))"
 echo -e "  Old-gen data nodes:      ${GREEN}${OLD_GEN_DATA}${NC}"
 if [ "$MASTER_ENABLED" = "True" ]; then
     echo -e "  Master node type:        ${GREEN}${MASTER_TYPE}${NC}"
@@ -273,6 +289,7 @@ $AWS_CMD cloudformation "$CFN_ACTION" \
         ParameterKey=OpenSearchDomainName,ParameterValue="${DOMAIN}" \
         ParameterKey=Email,ParameterValue="${EMAIL}" \
         ParameterKey=NumberOfDataNodes,ParameterValue="${DATA_INSTANCE_COUNT}" \
+        ParameterKey=TotalNumberOfNodes,ParameterValue="${TOTAL_NODES}" \
         ParameterKey=ShardsThreshold,ParameterValue="${SHARDS_THRESHOLD}" \
         ParameterKey=FreeStorageSpaceWarningThreshold,ParameterValue="${STORAGE_WARNING_MIB}" \
         ParameterKey=FreeStorageSpaceCriticalThreshold,ParameterValue="${STORAGE_CRITICAL_MIB}" \
