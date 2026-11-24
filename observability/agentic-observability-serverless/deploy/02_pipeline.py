@@ -10,7 +10,7 @@ Creates (idempotent):
 
 Usage:
   python deploy/02_pipeline.py --name agentobs --region us-east-1 --profile default --dlq-bucket <unique-bucket-name>
-Prints the ingest endpoint when ACTIVE (5-10 minutes; the endpoint may refuse connections for a few more minutes).
+Prints the ingest endpoint when ACTIVE (10-16 minutes; the endpoint may refuse connections for a few more minutes).
 """
 import argparse
 import json
@@ -134,7 +134,7 @@ def main():
                              Tags=tags)
         print(f"pipeline {pipe}: create requested (rendered config saved to {out})")
 
-    for _ in range(90):
+    for _ in range(180):  # up to 30 min; creation typically takes 10-16 min
         p = osis.get_pipeline(PipelineName=pipe)["Pipeline"]
         if p["Status"] == "ACTIVE":
             print(f"\npipeline {pipe}: ACTIVE")

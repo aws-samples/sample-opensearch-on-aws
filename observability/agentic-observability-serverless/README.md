@@ -66,7 +66,7 @@ Each script is idempotent and prints the identifiers the next one needs.
    the script reports the user data over the 16 KiB limit): host IAM role, security group and an EC2
    instance whose user data clones the OpenTelemetry Demo at tag 3.1.0, applies the additions in `demo-app/`
    (live models on Bedrock, weighted model mix, realistic shopper questions), points the Collector at the pipeline
-   and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions.
+   and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions. If RunInstances reports InsufficientInstanceCapacity, re-run with a public subnet in another Availability Zone or another 8 vCPU / 32 GiB type via --instance-type (for example 7a.2xlarge); the role and security group are reused.
 4. **OpenSearch UI** (`deploy/04_ui.md`, ~15 min): application, workspace, datasets, and a query to confirm data is
    arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
 5. **Online evaluation** (`evaluation/README.md`): run `score_live.py` once, then on a timer; build dashboard 3 from

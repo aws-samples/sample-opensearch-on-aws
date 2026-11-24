@@ -43,6 +43,10 @@ from `aws osis get-pipeline --pipeline-name <name>-otlp --query 'Pipeline.Ingest
 
 ## Operational notes
 
+- docker logs otel-collector may show Exporting failed. Dropping data. with a mapper_parsing_exception from the exporter
+  named opensearch. That is the demo's bundled local OpenSearch container (its own log store), not the OpenSearch Ingestion
+  exporters (otlphttp/osis-*); it does not affect what reaches the collection.
+
 - The agent's OTel exporter stops with "Queue full, dropping Span" if the Collector is unreachable for a while and
   does not resume on its own. Restart the `agent` container after any Collector or pipeline change; a small watchdog
   that restarts it when no spans arrive is cheap insurance for an unattended demo.
