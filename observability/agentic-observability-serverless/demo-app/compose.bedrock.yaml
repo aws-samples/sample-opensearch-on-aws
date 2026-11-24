@@ -1,0 +1,33 @@
+# Adds a LiteLLM proxy in front of Amazon Bedrock and points the OTel Demo agent at it.
+# Load AFTER compose.agent.yaml:
+#   docker compose -f compose.yaml -f compose.full.yaml -f compose.observability.yaml -f compose.extras.yaml \
+#                  -f compose.agent.yaml -f compose.bedrock.yaml -f compose.patches.yaml up -d
+# Credentials: the EC2 instance role (no keys). Set the IMDS hop limit to 2 so a container can reach the metadata service.
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    env_file:
+      - ./litellm/litellm.env          # LITELLM_MASTER_KEY=sk-...  (generate once; chmod 600; never commit)
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+    ports:
+      - "127.0.0.1:4000:4000"          # loopback only, for health checks from the host
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+  agent:
+    depends_on:
+      litellm:
+        condition: service_started

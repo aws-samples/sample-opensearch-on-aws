@@ -1,0 +1,46 @@
+{
+  "index_patterns": ["agent-evals*"],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "index.timestamp_field": "@timestamp",
+      "index.data.retention": "90"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "traceId": { "type": "keyword" },
+        "spanId": { "type": "keyword" },
+        "question": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+        "answer": { "type": "text" },
+        "use_case": { "type": "keyword" },
+        "user_id": { "type": "keyword" },
+        "model": { "type": "keyword" },
+        "input_tokens": { "type": "long" },
+        "output_tokens": { "type": "long" },
+        "cost_usd": { "type": "double" },
+        "duration_ms": { "type": "double" },
+        "llm_calls": { "type": "integer" },
+        "tool_calls": { "type": "integer" },
+        "tool_names": { "type": "keyword" },
+        "answered": { "type": "boolean" },
+        "error": { "type": "boolean" },
+        "score_correct": { "type": "float" },
+        "score_relevant": { "type": "float" },
+        "score_helpful": { "type": "float" },
+        "score_overall": { "type": "float" },
+        "hallucination": { "type": "boolean" },
+        "label": { "type": "keyword" },
+        "explanation": { "type": "text" },
+        "judge_model": { "type": "keyword" },
+        "judge_input_tokens": { "type": "long" },
+        "judge_output_tokens": { "type": "long" },
+        "judge_cost_usd": { "type": "double" },
+        "eval_type": { "type": "keyword" },
+        "eval_run_id": { "type": "keyword" },
+        "eval_version": { "type": "keyword" },
+        "scored_at": { "type": "date" }
+      }
+    }
+  }
+}

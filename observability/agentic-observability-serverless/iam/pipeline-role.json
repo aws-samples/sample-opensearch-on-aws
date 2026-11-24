@@ -1,0 +1,24 @@
+{
+  "_comment": "Trust policy principal: osis-pipelines.amazonaws.com. Data access to the collection is granted separately through an OpenSearch Serverless data access policy that lists this role as a principal with aoss:* on collection/<collection-name> and index/<collection-name>/*.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ServerlessApi",
+      "Effect": "Allow",
+      "Action": ["aoss:APIAccessAll"],
+      "Resource": "arn:aws:aoss:<region>:<account-id>:collection/<collection-id>"
+    },
+    {
+      "Sid": "DeadLetterQueue",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::<dlq-bucket>/dlq/*"
+    },
+    {
+      "Sid": "DiscoverCollection",
+      "Effect": "Allow",
+      "Action": ["aoss:BatchGetCollection"],
+      "Resource": "*"
+    }
+  ]
+}

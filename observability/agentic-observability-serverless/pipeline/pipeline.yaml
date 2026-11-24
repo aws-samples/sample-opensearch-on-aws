@@ -1,0 +1,168 @@
+version: "2"
+
+otlp-pipeline:
+  source:
+    otlp:
+      logs_path: "/<prefix>/v1/logs"
+      traces_path: "/<prefix>/v1/traces"
+      metrics_path: "/<prefix>/v1/metrics"   # required by the otlp source; metric events match no route and are dropped
+  route:
+    - logs: 'getEventType() == "LOG"'
+    - traces: 'getEventType() == "TRACE"'
+  processor: []
+  sink:
+    - pipeline:
+        name: "otel-logs-pipeline"
+        routes:
+          - logs
+    - pipeline:
+        name: "otel-traces-pipeline"
+        routes:
+          - traces
+
+otel-logs-pipeline:
+  source:
+    pipeline:
+      name: "otlp-pipeline"
+  processor:
+    - copy_values:
+        entries:
+          - from_key: "time"
+            to_key: "@timestamp"
+          # otel_traces adds serviceName to spans; nothing does so for logs. Promote it so Discover can
+          # filter/aggregate on it (resource.attributes is flat_object and not aggregatable).
+          - from_key: "resource/attributes/service.name"
+            to_key: "serviceName"
+  sink:
+    - opensearch:
+        hosts:
+          - "https://<collection-id>.aoss.<region>.on.aws"
+        index_type: "custom"
+        index: "otel-logs-r4-%{yyyy.MM.dd}"
+        aws:
+          serverless: true
+          region: "<region>"
+          sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"
+        dlq:
+          s3:
+            bucket: "<dlq-bucket>"
+            key_path_prefix: "dlq/logs/"
+            region: "<region>"
+            sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"
+
+otel-traces-pipeline:
+  source:
+    pipeline:
+      name: "otlp-pipeline"
+  processor:
+    - otel_traces:
+    # Attribute-key collisions across the shop's 20 services (old vs new OTel conventions, or a bare key vs a
+    # namespaced one). A field can be a scalar or an object, not both, so rename the scalar/legacy form to a
+    # sibling key before the sink. Keys found in the pipeline's own error log on 17 Nov 2026.
+    - rename_keys:
+        entries:
+          - from_key: "attributes/rpc.system"
+            to_key: "attributes/rpc.system_legacy"
+            overwrite_if_to_key_exists: true
+          - from_key: "attributes/db.system"
+            to_key: "attributes/db.system_legacy"
+            overwrite_if_to_key_exists: true
+          - from_key: "attributes/code.function"
+            to_key: "attributes/code.function_legacy"
+            overwrite_if_to_key_exists: true
+          - from_key: "attributes/user_agent"
+            to_key: "attributes/user_agent_raw"
+            overwrite_if_to_key_exists: true
+          - from_key: "attributes/upstream_cluster"
+            to_key: "attributes/upstream_cluster_raw"
+            overwrite_if_to_key_exists: true
+          - from_key: "attributes/demo.ad.context_keys"
+            to_key: "attributes/demo.ad.context_keys_raw"
+            overwrite_if_to_key_exists: true
+          # a bare string `error` collides with the `error.*` namespace (error.type, error.message); rename_keys cannot
+          # test the value type, so this only fires when the key is a scalar (an object would carry the dotted form)
+          - from_key: "attributes/error"
+            to_key: "attributes/error_raw"
+            overwrite_if_to_key_exists: true
+    # Serverless TIME SERIES collections reject any document without @timestamp
+    # ("document is missing required timestamp field [@timestamp]", verified 16 Oct 2026),
+    # and otel_traces emits startTime/endTime only -> copy startTime to @timestamp.
+    - copy_values:
+        entries:
+          - from_key: "startTime"
+            to_key: "@timestamp"
+    # Agent Traces reads gen_ai.* at the document root as keyword/long; OSIS stores span
+    # attributes under attributes.* -> copy the ones the UI keys on. Documented workaround,
+    # to be removed when the UI reads attributes.gen_ai.* natively.
+    - copy_values:
+        entries:
+          - from_key: "attributes/gen_ai.operation.name"
+            to_key: "gen_ai.operation.name"
+          - from_key: "attributes/gen_ai.agent.name"
+            to_key: "gen_ai.agent.name"
+          - from_key: "attributes/gen_ai.request.model"
+            to_key: "gen_ai.request.model"
+          - from_key: "attributes/gen_ai.provider.name"
+            to_key: "gen_ai.provider.name"
+          - from_key: "attributes/gen_ai.tool.name"
+            to_key: "gen_ai.tool.name"
+          - from_key: "attributes/gen_ai.conversation.id"
+            to_key: "gen_ai.conversation.id"
+          - from_key: "attributes/gen_ai.usage.input_tokens"
+            to_key: "gen_ai.usage.input_tokens"
+          - from_key: "attributes/gen_ai.usage.output_tokens"
+            to_key: "gen_ai.usage.output_tokens"
+          - from_key: "attributes/gen_ai.response.finish_reasons"
+            to_key: "gen_ai.response.finish_reasons"
+          # which model actually answered (differs from request.model once LiteLLM spreads calls across models)
+          - from_key: "attributes/gen_ai.response.model"
+            to_key: "gen_ai.response.model"
+          - from_key: "attributes/gen_ai.input.messages"
+            to_key: "gen_ai.input.messages"
+          - from_key: "attributes/gen_ai.output.messages"
+            to_key: "gen_ai.output.messages"
+          - from_key: "attributes/gen_ai.tool.call.arguments"
+            to_key: "gen_ai.tool.call.arguments"
+          - from_key: "attributes/gen_ai.tool.call.result"
+            to_key: "gen_ai.tool.call.result"
+          # dot-free helper so the root-flag condition below avoids dotted keys in the expression
+          - from_key: "attributes/gen_ai.operation.name"
+            to_key: "genai_op"
+          - from_key: "attributes/traceloop.span.kind"
+            to_key: "traceloop_kind"
+    # Agent Traces lists only root spans (empty parentSpanId) that carry gen_ai.operation.name. The OTel Demo agent
+    # (Traceloop instrumentation) parents its agent span under the HTTP server span and names the operation
+    # invoke_workflow, so no conversation would appear. Flag ONE span per conversation as the root: the OUTERMOST agent
+    # span `astronomy_shop_agent_workflow.workflow`, the only wrapper that carries the conversation token totals, and
+    # relabel it invoke_agent. Every other span keeps its real parent, so the whole tree hangs under this row and
+    # Discover -> Traces still shows the HTTP span. Remove this block if your agent emits a semconv invoke_agent root.
+    - add_entries:
+        entries:
+          - key: "parentSpanId"
+            value: ""
+            overwrite_if_key_exists: true
+            add_when: '/genai_op == "invoke_workflow" and /traceloop_kind == "workflow"'
+          - key: "gen_ai.operation.name"
+            value: "invoke_agent"
+            overwrite_if_key_exists: true
+            add_when: '/genai_op == "invoke_workflow" and /traceloop_kind == "workflow"'
+    - delete_entries:
+        with_keys:
+          - "genai_op"
+          - "traceloop_kind"
+  sink:
+    - opensearch:
+        hosts:
+          - "https://<collection-id>.aoss.<region>.on.aws"
+        index_type: "custom"
+        index: "otel-v1-apm-span-r4-%{yyyy.MM.dd}"
+        aws:
+          serverless: true
+          region: "<region>"
+          sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"
+        dlq:
+          s3:
+            bucket: "<dlq-bucket>"
+            key_path_prefix: "dlq/traces/"
+            region: "<region>"
+            sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"

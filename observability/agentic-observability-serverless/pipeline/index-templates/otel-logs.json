@@ -1,0 +1,26 @@
+{
+  "index_patterns": ["otel-logs-*"],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "index.data.retention": "30",
+      "index.warm.after": "7d"
+    },
+    "mappings": {
+      "properties": {
+        "attributes": { "type": "flat_object" },
+        "resource": { "properties": { "attributes": { "type": "flat_object" } } },
+        "instrumentationScope": { "type": "flat_object" },
+        "@timestamp": { "type": "date_nanos" },
+        "time": { "type": "date_nanos" },
+        "observedTime": { "type": "date_nanos" },
+        "traceId": { "type": "keyword" },
+        "spanId": { "type": "keyword" },
+        "serviceName": { "type": "keyword" },
+        "severityText": { "type": "keyword" },
+        "severityNumber": { "type": "integer" },
+        "body": { "type": "text" }
+      }
+    }
+  }
+}
