@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "osis:Ingest",
+        "osis:GetPipeline"
+      ],
+      "Resource": "arn:aws:osis:{{REGION}}:{{ACCOUNT_ID}}:pipeline/{{PIPELINE_NAME}}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*",
+        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/us.anthropic.claude-haiku-5-5",
+        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/us.anthropic.claude-sonnet-5-5"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::{{CONFIG_BUCKET}}/demo-overlay.tgz"
+    }
+  ]
+}

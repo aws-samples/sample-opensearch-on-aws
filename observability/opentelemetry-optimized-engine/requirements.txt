@@ -1,0 +1,3 @@
+# for the offline tests only; the scripts use the standard library
+pytest>=8.0
+PyYAML>=6.0

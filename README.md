@@ -17,6 +17,7 @@ This repository provides sample code and reference architectures for building pr
 | [ingestion](ingestion/) | Load and reload data into Amazon OpenSearch Service using OpenSearch Ingestion (OSI) pipelines. Includes a full AWS CDK stack with VPC, OpenSearch domain, OSI pipeline, S3 buckets, and SSM-accessible jumphost. |
 | [tools/index-compare](tools/index-compare/) | Compare two OpenSearch indices and identify document IDs present in the source but missing from the target. Supports Amazon OpenSearch Service managed domains and Serverless collections via SigV4, plus HTTP basic auth, with an optional local Docker Compose setup for testing. |
 | [operations/cloudwatch-alarms](operations/cloudwatch-alarms/) | Deploy AWS-recommended CloudWatch alarms for an Amazon OpenSearch Service domain in minutes. Includes a CloudFormation template (23 alarms + SNS topic) and an interactive deployment script that auto-detects your domain configuration. |
+| [observability/opentelemetry-optimized-engine](observability/opentelemetry-optimized-engine/) | Run OpenTelemetry traces and logs on an Amazon OpenSearch Service domain with the Optimized engine: index templates for columnar storage, an OpenSearch Ingestion pipeline for spans and Agent Traces, PPL queries over raw spans, and a storage comparison against a General Purpose domain fed with the same data. |
 
 _More samples coming soon — vector search patterns, search relevance tuning, and operational tooling._
 
@@ -42,6 +43,11 @@ sample-opensearch-on-aws/
 │   ├── README.md
 │   ├── THREAT_MODEL.md
 │   └── ...
+├── observability/
+│   └── opentelemetry-optimized-engine/   # OpenTelemetry traces and logs on the Optimized engine
+│       ├── README.md
+│       ├── THREAT_MODEL.md
+│       └── ...
 ├── operations/
 │   └── cloudwatch-alarms/    # Recommended CloudWatch alarms
 │       ├── README.md

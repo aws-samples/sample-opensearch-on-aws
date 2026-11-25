@@ -1,0 +1,29 @@
+# LiteLLM proxy in front of Amazon Bedrock (loaded after compose.agent.yaml). Image pinned by digest (main-stable, 2026-11-20).
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035
+    container_name: litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    env_file:
+      - ./litellm/litellm.env
+    environment:
+      - AWS_REGION={{REGION}}
+      - AWS_DEFAULT_REGION={{REGION}}
+    ports:
+      - "127.0.0.1:4000:4000"   # host loopback only, for curl checks; not reachable from outside the instance
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+  agent:
+    depends_on:
+      litellm:
+        condition: service_started

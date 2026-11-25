@@ -1,0 +1,10 @@
+# Local adjustments to the OpenTelemetry Demo compose files (loaded last)
+services:
+  recommendation:
+    healthcheck:
+      # upstream 3.1.0 check uses `nc`, which the image lacks; probe the port with bash instead
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9001' 2>/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

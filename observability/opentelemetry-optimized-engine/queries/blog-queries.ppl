@@ -1,0 +1,42 @@
+-- Example PPL queries, verified on OpenSearch 3.7 (Optimized engine). Paste one at a time.
+-- The match() queries need a few minutes of load first: the load generator cycles through a handful of prompts.
+
+-- Requests, errors and average latency by service and operation, slowest first (server spans = one row per request)
+source=otel-v2-apm-span-*
+| where kind = 'SPAN_KIND_SERVER'
+| eval error = if(status.code = 2, 1, 0)
+| stats count() as requests, sum(error) as errors, avg(durationInNanos) as avg_ns by serviceName, name
+| eval avg_ms = round(avg_ns / 1000000, 1)
+| fields serviceName, name, requests, errors, avg_ms
+| sort - avg_ms | head 10
+
+-- Agent traces whose prompt mentions a word: count, average latency, average input tokens
+source=otel-v2-apm-span-*
+| where gen_ai.operation.name = 'invoke_agent' and parentSpanId = '' and match(gen_ai.input.messages, 'products')
+| stats count() as traces, avg(durationInNanos) as avg_ns, avg(gen_ai.usage.input_tokens) as avg_in
+| eval avg_ms = round(avg_ns / 1000000, 1)
+| fields traces, avg_ms, avg_in
+
+-- Model calls by model: count, average latency, average tokens
+source=otel-v2-apm-span-*
+| where gen_ai.operation.name = 'chat'
+| stats count() as calls, avg(durationInNanos) as avg_ns, avg(gen_ai.usage.input_tokens) as avg_in, avg(gen_ai.usage.output_tokens) as avg_out by gen_ai.response.model
+| eval avg_ms = round(avg_ns / 1000000, 1)
+| fields gen_ai.response.model, calls, avg_ms, avg_in, avg_out
+
+-- Slowest agent traces
+source=otel-v2-apm-span-*
+| where gen_ai.operation.name = 'invoke_agent' and parentSpanId = ''
+| eval ms = durationInNanos / 1000000
+| fields traceId, startTime, ms, gen_ai.usage.input_tokens, gen_ai.usage.output_tokens
+| sort - ms | head 5
+
+-- Every span of one trace, then its log lines (same traceId in both indices)
+source=otel-v2-apm-span-* | where traceId = '<trace-id>' | eval ms = durationInNanos / 1000000 | fields startTime, serviceName, name, ms | sort startTime
+source=logs-otel-v1-*    | where traceId = '<trace-id>' | fields time, serviceName, severityText, body | sort time
+
+-- Tool results that mention a word, by tool (full-text search inside tool output)
+source=otel-v2-apm-span-*
+| where match(gen_ai.tool.call.result, 'telescope')
+| stats count() as calls by gen_ai.tool.name
+| sort - calls

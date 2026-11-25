@@ -1,0 +1,177 @@
+version: "2"
+# Storage comparison variant: every document goes to the Optimized domain AND a General Purpose domain
+# with the same template. Needs GP_DOMAIN_ENDPOINT in config.env and both domains in iam/pipeline-role-policy.json.
+# Placeholders {{...}} are filled by scripts/render.py from config.env.
+otlp-pipeline:
+  source:
+    otlp:
+      logs_path: "/{{PIPELINE_NAME}}/v1/logs"
+      traces_path: "/{{PIPELINE_NAME}}/v1/traces"
+      metrics_path: "/{{PIPELINE_NAME}}/v1/metrics"   # required by the validator even though metrics are not routed
+  route:
+    - logs: 'getEventType() == "LOG"'
+    - traces: 'getEventType() == "TRACE"'
+  processor: []
+  sink:
+    - pipeline: { name: otel-logs-pipeline, routes: [logs] }
+    - pipeline: { name: otel-traces-pipeline, routes: [traces] }
+    - pipeline: { name: service-map-pipeline, routes: [traces] }
+
+otel-logs-pipeline:
+  source: { pipeline: { name: otlp-pipeline } }
+  processor:
+    - copy_values:
+        entries:
+          - { from_key: "time", to_key: "@timestamp" }
+          - { from_key: "resource/attributes/service.name", to_key: "serviceName" }
+    # Some loggers emit `context.*` twice (flat and nested); a single-valued field rejects the second copy.
+    - delete_entries:
+        with_keys: ["attributes/context"]
+    # One service sends `http` as a value, others send `http.*` as an object. Rename the value so both are accepted.
+    - rename_keys:
+        entries:
+          - { from_key: "attributes/http",  to_key: "attributes/http_raw",  overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/https", to_key: "attributes/https_raw", overwrite_if_to_key_exists: true }
+  sink:
+      - opensearch:
+          hosts: ["https://{{DOMAIN_ENDPOINT}}"]
+          index_type: custom
+          index: logs-otel-v1-%{yyyy.MM.dd}
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "logs/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+      - opensearch:
+          hosts: ["https://{{GP_DOMAIN_ENDPOINT}}"]
+          index_type: custom
+          index: logs-otel-v1-%{yyyy.MM.dd}
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "gp-logs/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+
+otel-traces-pipeline:
+  source: { pipeline: { name: otlp-pipeline } }
+  processor:
+    - otel_traces:
+    # Attributes that arrive as a value from one service and as an object (`error.type`, `rpc.system.*`) from another.
+    - rename_keys:
+        entries:
+          - { from_key: "attributes/rpc.system",           to_key: "attributes/rpc.system_legacy",       overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/db.system",            to_key: "attributes/db.system_legacy",        overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/code.function",        to_key: "attributes/code.function_legacy",    overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/user_agent",           to_key: "attributes/user_agent_raw",          overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/upstream_cluster",     to_key: "attributes/upstream_cluster_raw",    overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/demo.ad.context_keys", to_key: "attributes/demo.ad.context_keys_raw", overwrite_if_to_key_exists: true }
+          - { from_key: "attributes/error",                to_key: "attributes/error_raw",               overwrite_if_to_key_exists: true }
+    - copy_values:
+        entries:
+          - { from_key: "startTime", to_key: "@timestamp" }
+    # Copy the GenAI attributes to the document root: typed there (long for token counts, text for messages) so
+    # PPL can aggregate the numbers and `match()` can search the prompts, answers and tool results.
+    - copy_values:
+        entries:
+          - { from_key: "attributes/gen_ai.operation.name", to_key: "gen_ai.operation.name" }
+          - { from_key: "attributes/gen_ai.agent.name", to_key: "gen_ai.agent.name" }
+          - { from_key: "attributes/gen_ai.request.model", to_key: "gen_ai.request.model" }
+          - { from_key: "attributes/gen_ai.provider.name", to_key: "gen_ai.provider.name" }
+          - { from_key: "attributes/gen_ai.tool.name", to_key: "gen_ai.tool.name" }
+          - { from_key: "attributes/gen_ai.conversation.id", to_key: "gen_ai.conversation.id" }
+          - { from_key: "attributes/gen_ai.usage.input_tokens", to_key: "gen_ai.usage.input_tokens" }
+          - { from_key: "attributes/gen_ai.usage.output_tokens", to_key: "gen_ai.usage.output_tokens" }
+          - { from_key: "attributes/gen_ai.response.finish_reasons", to_key: "gen_ai.response.finish_reasons" }
+          - { from_key: "attributes/gen_ai.response.model", to_key: "gen_ai.response.model" }
+          - { from_key: "attributes/gen_ai.input.messages", to_key: "gen_ai.input.messages" }
+          - { from_key: "attributes/gen_ai.output.messages", to_key: "gen_ai.output.messages" }
+          - { from_key: "attributes/gen_ai.tool.call.arguments", to_key: "gen_ai.tool.call.arguments" }
+          - { from_key: "attributes/gen_ai.tool.call.result", to_key: "gen_ai.tool.call.result" }
+          - { from_key: "attributes/gen_ai.operation.name", to_key: "genai_op" }
+          - { from_key: "attributes/traceloop.span.kind",   to_key: "traceloop_kind" }
+    # Traceloop-instrumented agents report their root as invoke_workflow; Agent Traces expects invoke_agent on a root span.
+    - add_entries:
+        entries:
+          - { key: "parentSpanId",                     value: "",             overwrite_if_key_exists: true, add_when: '/genai_op == "invoke_workflow" and /traceloop_kind == "workflow"' }
+          - { key: "gen_ai.operation.name",            value: "invoke_agent", overwrite_if_key_exists: true, add_when: '/genai_op == "invoke_workflow" and /traceloop_kind == "workflow"' }
+          # Agent Traces reads the Kind column from the attribute copy, so rewrite that one too
+          - { key: "attributes/gen_ai.operation.name", value: "invoke_agent", overwrite_if_key_exists: true, add_when: '/genai_op == "invoke_workflow" and /traceloop_kind == "workflow"' }
+    - delete_entries:
+        with_keys: ["genai_op", "traceloop_kind"]
+  sink:
+      - opensearch:
+          hosts: ["https://{{DOMAIN_ENDPOINT}}"]
+          index_type: custom
+          index: otel-v2-apm-span-%{yyyy.MM.dd}
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "spans/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+      - opensearch:
+          hosts: ["https://{{GP_DOMAIN_ENDPOINT}}"]
+          index_type: custom
+          index: otel-v2-apm-span-%{yyyy.MM.dd}
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "gp-spans/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+
+service-map-pipeline:
+  source: { pipeline: { name: otlp-pipeline } }
+  processor:
+    - otel_apm_service_map:
+        group_by_attributes: [telemetry.sdk.language]
+        window_duration: 30s
+  route:
+    - otel_apm_service_map_route: 'getEventType() == "SERVICE_MAP"'
+  sink:
+      - opensearch:
+          hosts: ["https://{{DOMAIN_ENDPOINT}}"]
+          index_type: otel-v2-apm-service-map
+          routes: [otel_apm_service_map_route]
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "service-map/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+      - opensearch:
+          hosts: ["https://{{GP_DOMAIN_ENDPOINT}}"]
+          index_type: otel-v2-apm-service-map
+          routes: [otel_apm_service_map_route]
+          aws:
+            serverless: false
+            region: "{{REGION}}"
+            sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+          dlq:
+            s3:
+              bucket: "{{DLQ_BUCKET}}"
+              key_path_prefix: "gp-service-map/"
+              region: "{{REGION}}"
+              sts_role_arn: "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"

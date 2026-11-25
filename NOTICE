@@ -1,2 +1,6 @@
 Amazon OpenSearch Samples
 Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+observability/opentelemetry-optimized-engine/demo/patches/agent/llm.py is a modified file from the OpenTelemetry Demo
+(https://github.com/open-telemetry/opentelemetry-demo), Copyright The OpenTelemetry Authors, Apache License 2.0.
+See observability/opentelemetry-optimized-engine/NOTICE.

@@ -1,0 +1,37 @@
+# OpenTelemetry Demo Collector override: send logs and traces to one Amazon OpenSearch Ingestion pipeline (SigV4).
+# Copy to src/otel-collector/otelcol-config-extras.yml in the OpenTelemetry Demo checkout. It is loaded LAST and
+# arrays replace, so every upstream processor/exporter that must stay is repeated. Not included: the debug exporter
+# (its summaries would be ingested as log records), otlp_grpc/jaeger and opensearch (the Demo's local stack).
+extensions:
+  sigv4auth:
+    region: {{REGION}}
+    service: osis
+processors:
+  # drop feature-flag plumbing spans (flagd's server spans and every service's flag-lookup client spans)
+  filter/drop_flagd_spans:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] == "flagd"'
+        - 'attributes["rpc.service"] == "flagd.evaluation.v2.Service"'
+        - 'IsMatch(name, "^flagd\\.")'
+        - 'name == "resolve" and resource.attributes["service.name"] == "fraud-detection"'
+exporters:
+  otlp_http/osis-logs:
+    logs_endpoint: "https://{{INGEST_ENDPOINT}}/{{PIPELINE_NAME}}/v1/logs"   # the pipeline-name segment is required
+    auth: { authenticator: sigv4auth }
+    compression: none
+  otlp_http/osis-traces:
+    traces_endpoint: "https://{{INGEST_ENDPOINT}}/{{PIPELINE_NAME}}/v1/traces"
+    auth: { authenticator: sigv4auth }
+    compression: none
+service:
+  extensions: [opamp, sigv4auth]
+  pipelines:
+    traces:
+      processors: [resource_detection, filter/drop_flagd_spans, memory_limiter, transform/sanitize_spans, gen_ai_normalizer, transform/redact_sensitive_data, redaction]
+      exporters: [span_metrics, otlp_http/osis-traces]
+    metrics:
+      exporters: [otlp_http/prometheus]
+    logs:
+      exporters: [otlp_http/osis-logs]
