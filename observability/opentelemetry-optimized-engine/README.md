@@ -70,6 +70,7 @@ Then send the person this short plan and wait for their approval before creating
 > - **Cost:** about `<estimate>` an hour while running, plus Bedrock calls
 > - **Time:** about an hour
 > - **Undo:** everything is tagged `project=<PROJECT_TAG>`; `scripts/cleanup.sh --delete` removes it
+> - **To open OpenSearch UI:** which IAM user or role do you sign in to the AWS console with? I'll give it access.
 >
 > Reply **ok**, or ask for the full resource list.
 
@@ -188,6 +189,8 @@ TAG="Key=project,Value=$PROJECT_TAG"
    The application endpoint accepts SigV4 for service name `opensearch` (`awscurl --service opensearch`), so the
    workspace (`POST /api/workspaces`, feature `use-case-observability`) and the dataset
    (`POST /w/<workspace>/api/saved_objects/index-pattern` with `signalType: "traces"`) can be created from a shell.
+   You open OpenSearch UI signed in to the AWS console. That identity needs access, so if it is not the one that ran
+   the commands above, add it as an admin of the application and to the `all_access` mapping.
    Agent Traces lists a trace when its root span satisfies `parentSpanId = "" AND isnotnull(attributes.gen_ai.operation.name)`.
 
 ## Operating notes
