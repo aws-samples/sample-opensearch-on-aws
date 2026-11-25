@@ -21,6 +21,7 @@ import time
 import boto3
 from botocore.exceptions import ClientError
 from opensearchpy import OpenSearch, RequestsAWSV4SignerAuth, RequestsHttpConnection
+from opensearchpy.exceptions import AuthorizationException
 
 HERE = pathlib.Path(__file__).resolve().parent
 PIPELINE_DIR = HERE.parent / "pipeline"
@@ -99,7 +100,18 @@ def main():
                         http_auth=RequestsAWSV4SignerAuth(s.get_credentials(), a.region, "aoss"),
                         use_ssl=True, verify_certs=True, connection_class=RequestsHttpConnection, timeout=60)
     for f in sorted((PIPELINE_DIR / "index-templates").glob("*.json")):
-        client.indices.put_index_template(name=f.stem, body=json.loads(f.read_text(encoding="utf-8")))
+        template = json.loads(f.read_text(encoding="utf-8"))
+        for attempt in range(13):  # a new data access policy can take a minute or two to apply
+            try:
+                client.indices.put_index_template(name=f.stem, body=template)
+                break
+            except AuthorizationException:
+                if attempt == 12:
+                    print(f"index template {f.stem}: still 403 after 3 minutes; check that you are one of the "
+                          f"--principals from 01_collection.py")
+                    raise
+                print(f"index template {f.stem}: 403, waiting for the data access policy to apply (retry in 15 s)")
+                time.sleep(15)
         print(f"index template {f.stem}: applied")
 
     # 4. pipeline

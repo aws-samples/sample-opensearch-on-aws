@@ -39,14 +39,14 @@ endpoint), data access to the collection (`aoss:*` on `index/<collection>/agent-
 `deploy/01_collection.py --principals` grants this) and `bedrock:InvokeModel` on the evaluation model. Apply `../pipeline/index-templates/agent-evals.json` first (the script also creates the index
 with the same mapping if it is missing).
 
+Run these from your workstation, with `--since` set to about an hour ago in UTC:
+
 ```bash
 export AOSS_COLLECTION=agentobs-ts AWS_REGION=us-east-1      # <name>-ts from deploy/01_collection.py
 # see what the evaluation model would read, no Bedrock calls, no writes
 python score_live.py --since 2026-11-18T02:10:00Z --dry-run --dry-run-show 3
-# score everything since a time, once
-python score_live.py --since 2026-11-18T02:10:00Z --workers 6
-# then keep scoring new conversations every 10 minutes
-python score_live.py --since 2026-11-18T02:10:00Z --workers 6 --loop 600
+# score up to 20 conversations, once (about $0.20)
+python score_live.py --since 2026-11-18T02:10:00Z --workers 6 --limit 20
 # what is in the index
 python check_evals.py 5
 ```
@@ -59,8 +59,16 @@ the hallucination flag) is never stored; it is retried on the next pass and give
 Throughput: ~90–120 conversations/min with 6 workers. Cost with Claude Sonnet 5.5 as the evaluation model:
 about 1 cent per conversation (≈ 1,000–2,500 input tokens of evidence, ~110 output tokens).
 
-For an unattended deployment, run the `--loop` form under a systemd timer or as a container on the same host as
-the Collector; the laptop version stops when the laptop sleeps.
+### Continuous scoring
+
+`--loop 600` keeps scoring new conversations every 10 minutes. With the load generator running, that is roughly
+$30 a day in evaluation-model calls. Do not leave it running on a laptop: it stops when the laptop sleeps, then
+scores the backlog in a burst when it wakes, and it keeps spending until you stop it.
+
+For continuous scoring, run it on a server in your account, for example as a systemd service, a scheduled container
+or a scheduled job. Whatever runs it needs the same permissions listed above. The sample's EC2 host role does not
+have them by default: it has Bedrock access but no collection access. Stop the loop, or delete the stack with
+`deploy/99_cleanup.py`, when you no longer need scores.
 
 ## Practical notes
 
