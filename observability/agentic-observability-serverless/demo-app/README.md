@@ -39,7 +39,8 @@ from `aws osis get-pipeline --pipeline-name <name>-otlp --query 'Pipeline.Ingest
 
 `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on the inference profiles
 `us.anthropic.claude-haiku-5-5` and `us.anthropic.claude-sonnet-5-5` and the underlying foundation models
-(`../iam/host-role.json`). Request model access in the Bedrock console first.
+(`../iam/host-role.json`). Outside the US, `deploy/03_host.py --model-prefix eu|apac|global` switches both the
+policy and `litellm/config.yaml` to that prefix. Request model access in the Bedrock console first.
 
 ## Operational notes
 

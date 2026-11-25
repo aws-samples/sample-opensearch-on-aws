@@ -58,6 +58,15 @@ Everything is created with the scripts in `deploy/` (Python, boto3; `pip install
 Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue.
 Each script is idempotent and prints the identifiers the next one needs.
 
+0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute): shows the AWS account and identity,
+   region, every resource it will create, the Bedrock models and whether they are available in the region, the
+   OpenTelemetry Demo, LiteLLM and Docker Compose versions, and an estimated daily cost. It creates nothing. In a
+   terminal it asks yes/no.
+
+> **Coding agents:** run `deploy/00_preflight.py` first, show its output to the user, and wait for an explicit
+> "yes" before running any script that creates resources. Ask again before running `deploy/99_cleanup.py`. Run the
+> evaluation once with a small `--limit`; do not leave `--loop` running on the user's machine.
+
 1. **Collection** (`deploy/01_collection.py`, ~5 min): next-generation collection group, time series collection,
    encryption, network and data access policies. Pass your own IAM principal(s) with `--principals`; they get data
    access for OpenSearch UI and the evaluation job. The default scales search to zero when idle; set `--min-search-ocu 2` (the smallest non-zero value the service accepts) for production, mission-critical or always-on demo workloads where the first query after an idle period must be fast.
@@ -91,10 +100,11 @@ names and templates; the scripts here create exactly what the rest of the sample
 ## Prerequisites
 
 - An AWS account with access to Amazon OpenSearch Serverless (next-generation time series collections), Amazon
-  OpenSearch Ingestion, OpenSearch UI and Amazon Bedrock in one region. The scripts default to us-east-1; another
-  region works only if it offers the cross-region inference profiles `us.anthropic.claude-haiku-5-5` and
-  `us.anthropic.claude-sonnet-5-5` (or you change the model ids in `demo-app/litellm/config.yaml`,
-  `deploy/03_host.py` and `evaluation/score_live.py`)
+  OpenSearch Ingestion, OpenSearch UI and Amazon Bedrock in one region. The scripts default to us-east-1 and the
+  `us.` Bedrock inference profiles for Claude Haiku 5.5 and Claude Sonnet 5.5. In another region, pass `--region`
+  and `--model-prefix` (for example `eu`, `apac` or `global`) to `00_preflight.py` and `03_host.py`, and set
+  `MODEL_PREFIX` for the evaluation job; `00_preflight.py` reports whether the profiles exist there. Only us-east-1
+  has been tested.
 - Bedrock model access granted for Anthropic Claude Haiku 5.5 and Claude Sonnet 5.5
 - An EC2 instance able to run the OpenTelemetry Demo (8 vCPU / 32 GiB recommended, Amazon Linux 2023, Docker,
   SSM agent, no inbound security-group rules)
@@ -128,7 +138,7 @@ the application and go with it.
 ## Repository layout
 
 ```
-deploy/              creation scripts (collection, pipeline, host), OpenSearch UI steps, cleanup script
+deploy/              preflight check, creation scripts (collection, pipeline, host), OpenSearch UI steps, cleanup script
 pipeline/            OSIS pipeline YAML, index templates, Collector exporter snippet
 demo-app/            compose overlays, LiteLLM config, agent and load-generator patches, env example, NOTICE
 evaluation/          score_live.py (online evaluation job), check_evals.py, parser test, requirements, README
@@ -139,7 +149,8 @@ THREAT_MODEL.md      STRIDE threat model for the provisioned resources
 ```
 
 Placeholders to replace: `<account-id>`, `<region>`, `<collection-id>`, `<collection-name>`, `<pipeline-name>`,
-`<pipeline-role>`, `<prefix>`, `<dlq-bucket>`. The `deploy/` scripts fill them in; `<prefix>` is the name prefix (also the path segment in the pipeline URL, e.g. `https://<endpoint>/agentobs/v1/traces`).
+`<pipeline-role>`, `<prefix>`, `<dlq-bucket>`, `<model-prefix>` (Bedrock inference profile prefix, `us` by
+default). The `deploy/` scripts fill them in; `<prefix>` is the name prefix (also the path segment in the pipeline URL, e.g. `https://<endpoint>/agentobs/v1/traces`).
 
 ## Further reading
 

@@ -7,8 +7,8 @@
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       "Resource": [
-        "arn:aws:bedrock:<region>:<account-id>:inference-profile/us.anthropic.claude-haiku-5-5",
-        "arn:aws:bedrock:<region>:<account-id>:inference-profile/us.anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:<region>:<account-id>:inference-profile/<model-prefix>.anthropic.claude-haiku-5-5",
+        "arn:aws:bedrock:<region>:<account-id>:inference-profile/<model-prefix>.anthropic.claude-sonnet-5-5",
         "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*",
         "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*"
       ]

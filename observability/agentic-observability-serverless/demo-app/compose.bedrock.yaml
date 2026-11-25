@@ -5,7 +5,9 @@
 # Credentials: the EC2 instance role (no keys). Set the IMDS hop limit to 2 so a container can reach the metadata service.
 services:
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    # LiteLLM 1.111.0, pinned by digest (the main-stable build this sample was tested with, November 2026).
+    # To upgrade, replace the digest and re-test; deploy/00_preflight.py prints the image in use.
+    image: ghcr.io/berriai/litellm@sha256:ce00096d012719d58c52cecfa373f7c6256dd1b0ff08f6fa607e10e9628f1f46
     container_name: litellm
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     volumes:

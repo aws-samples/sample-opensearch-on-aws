@@ -12,6 +12,7 @@ User data (runs once at first boot, log: /var/log/bootstrap.log on the host):
 
 Usage:
   python deploy/03_host.py --name agentobs --region us-east-1 --profile default --subnet subnet-xxxxxxxx
+  (outside the US, add --model-prefix eu / apac / global to use that region's Bedrock inference profiles)
 First spans reach the collection about 15-25 minutes after launch (image pulls). Reach the shop UI afterwards with
   aws ssm start-session --target <instance-id> --document-name AWS-StartPortForwardingSession \
       --parameters "portNumber=8080,localPortNumber=8080"      -> http://localhost:8080
@@ -21,6 +22,7 @@ import base64
 import gzip
 import json
 import pathlib
+import re
 import sys
 import time
 
@@ -29,8 +31,14 @@ from botocore.exceptions import ClientError
 
 HERE = pathlib.Path(__file__).resolve().parent
 DEMO_APP = HERE.parent / "demo-app"
-DEMO_TAG = "3.1.0"
-MODELS = ("us.anthropic.claude-haiku-5-5", "us.anthropic.claude-sonnet-5-5")
+DEMO_TAG = "3.1.0"            # OpenTelemetry Demo release; the files in ../demo-app/patches/ are modified copies of it
+COMPOSE_VERSION = "v2.32.4"   # Docker Compose plugin installed on the host
+MODEL_IDS = ("anthropic.claude-haiku-5-5", "anthropic.claude-sonnet-5-5")
+DEFAULT_MODEL_PREFIX = "us"   # Bedrock cross-region inference profile prefix, e.g. us, eu, apac, global
+
+
+def model_profiles(prefix):
+    return [f"{prefix}.{m}" for m in MODEL_IDS]
 
 
 def code(e):
@@ -104,7 +112,7 @@ exec > >(tee -a /var/log/bootstrap.log) 2>&1
 dnf install -y docker git jq make python3 >/dev/null
 systemctl enable --now docker
 mkdir -p /usr/libexec/docker/cli-plugins
-curl -sSL https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
+curl -sSL https://github.com/docker/compose/releases/download/{COMPOSE_VERSION}/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
 chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 cd /root
 [ -d opentelemetry-demo ] || git clone --depth 1 --branch {DEMO_TAG} https://github.com/open-telemetry/opentelemetry-demo.git
@@ -134,10 +142,17 @@ def main():
     ap.add_argument("--subnet", required=True, help="public subnet with a route to the internet (image pulls, Bedrock, OSIS)")
     ap.add_argument("--instance-type", default="r8a.2xlarge")
     ap.add_argument("--ami-param", default="/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64")
+    ap.add_argument("--model-prefix", default=DEFAULT_MODEL_PREFIX,
+                    help="Bedrock inference profile prefix for the assistant's models (us, eu, apac, global); "
+                         "the profiles must exist in --region")
     ap.add_argument("--tags", default="", help="extra tags k=v,k=v")
     ap.add_argument("--demo-app-s3", default=None, metavar="s3://bucket/prefix",
                     help="upload demo-app/ here and let the host fetch it (avoids the 16 KiB user-data limit); the DLQ bucket works")
     a = ap.parse_args()
+    if not re.fullmatch(r"[a-z][a-z-]*", a.model_prefix):
+        print(f"--model-prefix {a.model_prefix!r} is not a Bedrock inference profile prefix (for example us, eu, apac)")
+        return 2
+    models = model_profiles(a.model_prefix)
 
     s = boto3.Session(profile_name=a.profile, region_name=a.region)
     acct = s.client("sts").get_caller_identity()["Account"]
@@ -171,7 +186,7 @@ def main():
     policy = {"Version": "2012-10-17", "Statement": [
         {"Sid": "IngestToPipeline", "Effect": "Allow", "Action": ["osis:Ingest"], "Resource": pipe_arn},
         {"Sid": "BedrockModels", "Effect": "Allow", "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-         "Resource": [f"arn:aws:bedrock:{a.region}:{acct}:inference-profile/{m}" for m in MODELS]
+         "Resource": [f"arn:aws:bedrock:{a.region}:{acct}:inference-profile/{m}" for m in models]
          + ["arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*", "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*"]},
     ]}
     iam.put_role_policy(RoleName=role_name, PolicyName="demo-host", PolicyDocument=json.dumps(policy))
@@ -207,7 +222,8 @@ def main():
     files = {
         "compose.bedrock.yaml": (DEMO_APP / "compose.bedrock.yaml").read_text(encoding="utf-8"),
         "compose.patches.yaml": (DEMO_APP / "compose.patches.yaml").read_text(encoding="utf-8"),
-        "litellm/config.yaml": (DEMO_APP / "litellm" / "config.yaml").read_text(encoding="utf-8").replace("us-east-1", a.region),
+        "litellm/config.yaml": (DEMO_APP / "litellm" / "config.yaml").read_text(encoding="utf-8")
+                               .replace("us-east-1", a.region).replace("us.anthropic.", f"{a.model_prefix}.anthropic."),
         "patches/agent/llm.py": (DEMO_APP / "patches" / "agent" / "llm.py").read_text(encoding="utf-8"),
         "patches/loadgen/locustfile.py": (DEMO_APP / "patches" / "loadgen" / "locustfile.py").read_text(encoding="utf-8"),
         "patches/loadgen/agent_prompts.py": (DEMO_APP / "patches" / "loadgen" / "agent_prompts.py").read_text(encoding="utf-8"),

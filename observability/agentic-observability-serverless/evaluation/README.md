@@ -43,6 +43,7 @@ Run these from your workstation, with `--since` set to about an hour ago in UTC:
 
 ```bash
 export AOSS_COLLECTION=agentobs-ts AWS_REGION=us-east-1      # <name>-ts from deploy/01_collection.py
+export MODEL_PREFIX=us                                       # Bedrock inference profile prefix (eu, apac, global elsewhere)
 # see what the evaluation model would read, no Bedrock calls, no writes
 python score_live.py --since 2026-11-18T02:10:00Z --dry-run --dry-run-show 3
 # score up to 20 conversations, once (about $0.20)

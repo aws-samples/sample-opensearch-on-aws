@@ -29,7 +29,9 @@ COLLECTION = os.environ.get("AOSS_COLLECTION", "agentobs-ts")  # <name>-ts as cr
 SPAN_INDEX = "otel-v1-apm-span-r4-*"
 EVAL_INDEX = "agent-evals"
 ROOT_NAME = "astronomy_shop_agent_workflow.workflow"
-JUDGE_MODEL = "us.anthropic.claude-sonnet-5-5"
+# Bedrock inference profile prefix (us, eu, apac, global): set MODEL_PREFIX outside the US, or pass --judge-model
+MODEL_PREFIX = os.environ.get("MODEL_PREFIX", "us")
+JUDGE_MODEL = f"{MODEL_PREFIX}.anthropic.claude-sonnet-5-5"
 EVAL_VERSION = "v1"
 # USD per 1M tokens (AWS Price List, us-east-1, on-demand Standard, 17 Nov 2026)
 PRICES = {"haiku": (0.11, 0.55), "sonnet": (2.20, 11.00)}
