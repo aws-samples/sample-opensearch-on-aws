@@ -200,3 +200,14 @@ def test_no_event_or_environment_framing():
         text = open(os.path.join(ROOT, f), encoding="utf-8", errors="ignore").read()
         m = words.search(text)
         assert not m, f"{f}: {m.group(0)}"
+
+def test_shell_scripts_avoid_gnu_only_date_flags():
+    # macOS ships BSD date: no -d / --date
+    for f in tracked_files():
+        if f.endswith(".sh") and not f.startswith("demo/"):   # demo/user-data.sh runs on Amazon Linux
+            text = open(os.path.join(ROOT, f), encoding="utf-8").read()
+            assert not re.search(r"\bdate\b[^\n|;]*\s(-d|--date)\b", text), f"{f}: GNU-only date flag"
+
+def test_readme_runs_python_through_a_detected_interpreter():
+    r = read("README.md")
+    assert "$PY scripts/render.py" in r and "python scripts/render.py" not in r

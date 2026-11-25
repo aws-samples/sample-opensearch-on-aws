@@ -48,12 +48,15 @@ logger emits twice. See the
 
 ## Prerequisites
 
+- **Where to run the commands:** the simplest is [AWS CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html)
+  in your Region. It has a current AWS CLI, bash, Python 3, pip, jq and git; add `pip3 install --user awscurl`.
+  Any Linux or macOS shell works too, and so does Git Bash on Windows.
 - **Region:** any Region where the Optimized engine and Anthropic Claude Haiku 5.5 and Sonnet 5.5 on Amazon Bedrock are
   available. `demo/litellm/config.yaml` uses the `us.` cross-Region inference profiles; outside the US, change the
   prefix to `eu.` or `apac.` and update the two ARNs in `iam/host-role-policy.json`.
 - **OpenSearch version:** the newest OpenSearch 3.x the service offers. 3.7 is the minimum.
-- **Tools:** bash, `jq`, Python 3.10 or later, `pip install -r requirements.txt` (pytest and PyYAML, for the tests),
-  and `pip install awscurl`. On Windows, use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that
+- **Tools:** bash, `jq`, Python 3.9 or later, and `awscurl` (`python3 -m pip install awscurl`). The tests also need
+  `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says `python3`. On Windows, use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that
   may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
   older CLI, create the domain in the console and run every other command as written.
@@ -94,7 +97,8 @@ the tag `project=$PROJECT_TAG`; `scripts/cleanup.sh` deletes only resources that
 
 ```bash
 cp config.env.example config.env   # edit
-python scripts/render.py
+PY=python3; "$PY" -c "" >/dev/null 2>&1 || PY=python   # python3 on Linux and macOS, python on Windows
+$PY scripts/render.py
 set -a; source config.env; set +a; export AWS_DEFAULT_REGION=$REGION   # the aws CLI does not read config.env
 export MSYS_NO_PATHCONV=1   # Git Bash only: keep arguments such as /aws/vendedlogs/... as they are
 for t in aws jq python awscurl; do command -v $t >/dev/null || echo "missing: $t"; done
@@ -223,8 +227,8 @@ Optimized domain: on General Purpose, nested span events count as extra Lucene d
 ## Tests
 
 ```bash
-pip install -r requirements.txt
-python -m pytest tests/
+$PY -m pip install -r requirements.txt
+$PY -m pytest tests/
 ```
 
 The tests run offline. They check that `render.py` fills every placeholder and fails on a missing one, that the
