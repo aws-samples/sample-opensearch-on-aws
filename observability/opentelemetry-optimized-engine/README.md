@@ -14,6 +14,7 @@ For dashboards, cost tracking, and online evaluation of an agent's answers, see 
 [agentic-observability-serverless](../agentic-observability-serverless/), which uses the same demo on an OpenSearch
 Serverless time series collection.
 
+Requires OpenSearch 3.7 or later; the commands below create the domain on the newest OpenSearch 3.x version available.
 Validated in November 2026 on OpenSearch 3.7 with OpenTelemetry Demo 3.1.0 in us-east-1.
 
 ```
@@ -56,6 +57,27 @@ logger emits twice. See the
   Model access).
 - About an hour end to end; the AWS waits are about 15 minutes of it.
 
+## Deploying with a coding agent
+
+This README is written so a coding agent can run it. If you are an agent, do this first: read `config.env`, resolve
+the values below, show them to the person, and wait for their approval before creating anything.
+
+> Hi. I'm about to set up the OpenTelemetry optimized-engine sample. Here is the plan:
+>
+> - **Account and Region:** `<account id>` (`<identity>`), `<region>`
+> - **OpenSearch domain:** `<DOMAIN_NAME>`, Optimized engine, OpenSearch `<newest 3.x version>`, 2 x or2.large.search, 20 GB gp3 per node, fine-grained access control with `<ADMIN_ARN>` as master user
+> - **OpenSearch Ingestion pipeline:** `<PIPELINE_NAME>`, 1 to 4 OCUs
+> - **EC2 instance:** m6i.2xlarge, Amazon Linux 2023, 60 GB, running the OpenTelemetry Demo 3.1.0 with its shopping agent calling Amazon Bedrock (Claude Haiku 5.5 and Sonnet 5.5)
+> - **Also:** two S3 buckets, two IAM roles, a CloudWatch log group, an OpenSearch UI application
+> - **Tag on everything:** `project=<PROJECT_TAG>`, so `scripts/cleanup.sh` can remove it all
+> - **Approximate cost while running:** about `<estimate>` per hour at list prices in this Region, plus Bedrock usage from the demo's load generator
+>
+> It takes about an hour. Reply **ok** to proceed, or tell me what to change.
+
+Fill in the angle brackets from `config.env`, `aws sts get-caller-identity`, `aws opensearch list-versions`, and the
+AWS pricing page for the Region. Do not continue until the person approves. When Agent Traces in OpenSearch UI lists
+traces from the demo, say so, and list every step where this README was unclear or wrong.
+
 ## Deployment
 
 Fill `config.env` and render once; every command below uses the files in `rendered/`. Two values (`DOMAIN_ENDPOINT`,
@@ -71,13 +93,14 @@ TAG="Key=project,Value=$PROJECT_TAG"
 ```
 
 1. **Domain.** In the console: Create domain, Standard create, use case Observability, engine mode Optimized,
-   OpenSearch 3.7, two `or2.large.search` data nodes, fine-grained access control with your IAM identity as master
-   user, and the tag `project=$PROJECT_TAG`. Or from the CLI:
+   the newest OpenSearch version offered (3.7 or later), two `or2.large.search` data nodes, 20 GB gp3 per node,
+   fine-grained access control with your IAM identity as master user, and the tag `project=$PROJECT_TAG`. Or from the CLI:
    ```bash
-   aws opensearch create-domain --domain-name $DOMAIN_NAME --engine-version OpenSearch_3.7 \
+   VERSION=$(aws opensearch list-versions --query "Versions[?starts_with(@, 'OpenSearch_3.')] | [0]" --output text)   # newest first
+   aws opensearch create-domain --domain-name $DOMAIN_NAME --engine-version $VERSION \
      --engine-mode OPTIMIZED --use-case OBSERVABILITY \
      --cluster-config "InstanceType=or2.large.search,InstanceCount=2,ZoneAwarenessEnabled=true,ZoneAwarenessConfig={AvailabilityZoneCount=2}" \
-     --ebs-options "EBSEnabled=true,VolumeType=gp3,VolumeSize=100" \
+     --ebs-options "EBSEnabled=true,VolumeType=gp3,VolumeSize=20" \
      --encryption-at-rest-options Enabled=true --node-to-node-encryption-options Enabled=true \
      --domain-endpoint-options EnforceHTTPS=true \
      --access-policies "$(jq -c . rendered/iam/domain-access-policy.json)" \
@@ -123,8 +146,8 @@ TAG="Key=project,Value=$PROJECT_TAG"
    rm -rf overlay && mkdir overlay && cp -r rendered/demo/. overlay/ && cp rendered/collector/otelcol-config-extras.yml overlay/ \
      && tar czf demo-overlay.tgz -C overlay . && aws s3 cp demo-overlay.tgz s3://$CONFIG_BUCKET/
    ```
-   Instance: Amazon Linux 2023, **x86_64** (the compose binary in user data is amd64), 32 GB RAM or more
-   (`m6i.2xlarge`), root volume 60 GB or more (the demo pulls about 30 images), instance profile `$HOST_ROLE`, IMDSv2
+   Instance: Amazon Linux 2023, **x86_64** (the compose binary in user data is amd64), any type with 32 GB RAM or
+   more (`m6i.2xlarge` in the command below), root volume 60 GB or more (the demo pulls about 30 images), instance profile `$HOST_ROLE`, IMDSv2
    with hop limit 2 so containers can use the instance role. It needs outbound internet (a public IP in a default-VPC
    subnet is enough) and nothing inbound:
    ```bash
