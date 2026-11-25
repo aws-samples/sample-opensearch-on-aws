@@ -34,16 +34,25 @@ and no HTTP error, else `fail`. The evaluation model's own tokens and cost are s
 
 ## Run it
 
-Prerequisites: Python 3.11+, `pip install boto3 opensearch-py`; an AWS identity with `aoss:BatchGetCollection` (to look up the
+Prerequisites: Python 3.11+, `pip install -r evaluation/requirements.txt` (in the same virtual environment as
+`deploy/`); an AWS identity with `aoss:BatchGetCollection` (to look up the
 endpoint), data access to the collection (`aoss:*` on `index/<collection>/agent-evals` and read on the span index;
 `deploy/01_collection.py --principals` grants this) and `bedrock:InvokeModel` on the evaluation model. Apply `../pipeline/index-templates/agent-evals.json` first (the script also creates the index
 with the same mapping if it is missing).
 
-Run these from your workstation, with `--since` set to about an hour ago in UTC:
+Run these from your workstation, with `--since` set to about an hour ago in UTC. Set three environment variables
+first (`AOSS_COLLECTION` is `<name>-ts` from `deploy/01_collection.py`; `MODEL_PREFIX` is the Bedrock inference
+profile prefix, `us` here, `eu`, `apac` or `global` elsewhere):
 
 ```bash
-export AOSS_COLLECTION=agentobs-ts AWS_REGION=us-east-1      # <name>-ts from deploy/01_collection.py
-export MODEL_PREFIX=us                                       # Bedrock inference profile prefix (eu, apac, global elsewhere)
+# macOS / Linux
+export AOSS_COLLECTION=agentobs-ts AWS_REGION=us-east-1 MODEL_PREFIX=us
+```
+```powershell
+# Windows PowerShell
+$env:AOSS_COLLECTION="agentobs-ts"; $env:AWS_REGION="us-east-1"; $env:MODEL_PREFIX="us"
+```
+```bash
 # see what the evaluation model would read, no Bedrock calls, no writes
 python score_live.py --since 2026-11-18T02:10:00Z --dry-run --dry-run-show 3
 # score up to 20 conversations, once (about $0.20)
@@ -55,7 +64,7 @@ python check_evals.py 5
 Each pass scores the oldest unscored conversations first, at most `--limit` per pass, and continues immediately while
 a backlog remains. A conversation that cannot be scored (throttling, or a verdict missing any of the three scores or
 the hallucination flag) is never stored; it is retried on the next pass and given up, with a log line, after
-`--max-retry-passes` (default 5). Run the tests offline with `python -m pytest evaluation/ deploy/`.
+`--max-retry-passes` (default 5). Run the tests offline with `pip install pytest` and `python -m pytest evaluation/ deploy/`.
 
 Throughput: ~90–120 conversations/min with 6 workers. Cost with Claude Sonnet 5.5 as the evaluation model:
 about 1 cent per conversation (≈ 1,000–2,500 input tokens of evidence, ~110 output tokens).

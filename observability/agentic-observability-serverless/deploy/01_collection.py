@@ -1,4 +1,4 @@
-"""Step 1a: OpenSearch Serverless collection group (next generation), time series collection, and its policies.
+"""Step 1: OpenSearch Serverless collection group (next generation), time series collection, and its policies.
 
 Creates (idempotent, re-run safe):
   collection group  <name>        NEXTGEN, standby replicas enabled, OCU limits from --max-ocu / --min-search-ocu (0, 2, 4, 8, 16, ...)
@@ -9,8 +9,7 @@ Creates (idempotent, re-run safe):
   collection        <name>-ts     TIMESERIES, in the group
 
 Usage:
-  python deploy/01_collection.py --name agentobs --region us-east-1 --profile default \
-      --principals arn:aws:iam::<account-id>:role/Admin,arn:aws:iam::<account-id>:user/<you>
+  python deploy/01_collection.py --name agentobs --region us-east-1 --profile default --principals arn:aws:iam::<account-id>:role/Admin,arn:aws:iam::<account-id>:user/<you>
 Prints the collection endpoint and ARN when ACTIVE (a few minutes). Needs: aoss:* and iam:GetRole.
 """
 import argparse

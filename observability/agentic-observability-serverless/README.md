@@ -54,15 +54,24 @@ to the failing span, and one PPL query in Query Workbench lists every affected c
 
 ## Build order
 
-Everything is created with the scripts in `deploy/` (Python, boto3; `pip install -r deploy/requirements.txt`).
-Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue
+Everything is created with the scripts in `deploy/` (Python, boto3). Install the dependencies in a virtual
+environment, from the sample's folder:
+
+```
+python -m venv .venv
+.venv\Scripts\activate            # Windows PowerShell
+source .venv/bin/activate         # macOS / Linux
+pip install -r deploy/requirements.txt -r evaluation/requirements.txt
+```
+If `python` is not found, use `python3` (common on macOS and Linux). The commands below work the same in PowerShell,
+bash and zsh. Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue
 (for example `<prefix>-dlq-<account-id>`). The scripts use us-east-1 unless you pass `--region`; they do not read
 your AWS CLI's default region. Each script is idempotent and prints the identifiers the next one needs.
 
 0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute, never waits for input): a short
    summary of the account, region, what will be created, a public subnet for the host, models, versions and estimated
-   cost. It asks which IAM user or role you sign in to the AWS console with. Re-run it with
-   `--console-principal <that ARN>` and it prints the exact commands for steps 1–4.
+   cost. It asks which IAM user or role you sign in to the AWS console with. Once you know that ARN, run the
+   preflight a second time with `--console-principal <ARN>` added, and it prints the exact commands for steps 1–4.
 
 > **Coding agents:** run `deploy/00_preflight.py` first and pass its summary to the user as it is, in a few
 > lines. Ask its questions (console sign-in identity, go ahead) and wait for "yes" before creating anything; then
@@ -116,8 +125,9 @@ names and templates; the scripts here create exactly what the rest of the sample
 - Bedrock model access granted for Anthropic Claude Haiku 5.5 and Claude Sonnet 5.5
 - An EC2 instance able to run the OpenTelemetry Demo (8 vCPU / 32 GiB recommended, Amazon Linux 2023, Docker,
   SSM agent, no inbound security-group rules)
-- Workstation: AWS CLI v2, Python 3.11+. Optional: the Session Manager plugin, only to open the shop's web page or a
-  shell on the host (`deploy/03_host.py` prints the command); the deployment itself does not need it.
+- Workstation (Windows, macOS or Linux): AWS CLI v2 with credentials configured, Python 3.11+. Optional: the
+  Session Manager plugin, only to open the shop's web page or a shell on the host (`deploy/03_host.py` prints the
+  port-forward command once the instance is online); the deployment itself does not need it.
 
 ## Cost
 
@@ -141,7 +151,7 @@ Deletes, in reverse order, what the deploy scripts created: the EC2 instance, se
 OpenSearch UI application; the pipeline and its log group; the pipeline role; the collection, its policies and the
 collection group. Each resource is deleted only if it carries the tag `project=agentic-observability-serverless`
 that the deploy scripts set; anything else with a matching name is listed and left alone. In the DLQ bucket only
-objects under `dlq/` are removed (and under `--demo-app-s3`, if you used it); the bucket itself is deleted only if
+objects under `dlq/<name>/` are removed (and under `--demo-app-s3`, if you used it); the bucket itself is deleted only if
 the sample created it and it is then empty. Stop the evaluation job first. The workspace and dashboards live inside
 the application and go with it.
 ## Repository layout

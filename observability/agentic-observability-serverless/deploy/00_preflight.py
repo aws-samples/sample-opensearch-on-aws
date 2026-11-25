@@ -4,8 +4,7 @@ Creates nothing and never waits for input. Run it first and confirm the plan bef
 deploying this sample should show this output to the user, ask the questions at the end, and wait for "yes".
 
 Usage:
-  python deploy/00_preflight.py --name agentobs --region us-east-1 --profile default \
-      [--console-principal <ARN you sign in to the AWS console with>] [--subnet subnet-...]
+  python deploy/00_preflight.py --name agentobs --region us-east-1 --profile default [--console-principal <ARN you sign in to the AWS console with>] [--subnet subnet-...]
   (outside the US, add --model-prefix eu / apac / global)
 With --console-principal it prints the exact commands for steps 1-4. Exit code: 0 = ready, 1 = a blocking problem.
 """

@@ -39,7 +39,7 @@ on a domain are provided here explicitly:
 `../deploy/02_pipeline.py` applies the templates with `opensearch-py` (SigV4), creates the DLQ bucket and the role,
 fills the placeholders in `pipeline.yaml`, validates it with `ValidatePipeline`, and creates the pipeline with
 CloudWatch logging to `/aws/vendedlogs/OpenSearchIngestion/<name>-otlp/audit-logs`. The rendered configuration is
-saved next to the script.
+saved as `rendered-<name>-otlp.yaml` in the directory you run the script from.
 
 Changing a live pipeline: delete and recreate rather than update in place. The endpoint keeps its DNS name; allow a
 few minutes after the pipeline reports ACTIVE before it accepts connections. The Collector queues meanwhile.

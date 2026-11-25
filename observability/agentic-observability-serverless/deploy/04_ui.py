@@ -1,12 +1,11 @@
-"""Step 3a: OpenSearch UI application connected to the collection. The workspace and datasets stay console steps (04_ui.md).
+"""Step 4: OpenSearch UI application connected to the collection. The workspace and datasets stay console steps (04_ui.md).
 
 Creates (idempotent):
   OpenSearch UI application  <name>-ui   data source = the <name>-ts collection, dashboard admins from --admins,
                                          tagged project=agentic-observability-serverless
 
 Usage:
-  python deploy/04_ui.py --name agentobs --region us-east-1 --profile default \
-      --admins arn:aws:sts::<account-id>:assumed-role/<Role>/<session>,arn:aws:iam::<account-id>:user/<you>
+  python deploy/04_ui.py --name agentobs --region us-east-1 --profile default --admins arn:aws:sts::<account-id>:assumed-role/<Role>/<session>,arn:aws:iam::<account-id>:user/<you>
 --admins takes the identity exactly as you are signed in to the AWS console: the user ARN for an IAM user, the
 session ARN (arn:aws:sts::...:assumed-role/...) for a role. Default: the identity running this script.
 Prints the application endpoint when ACTIVE (usually a few minutes).

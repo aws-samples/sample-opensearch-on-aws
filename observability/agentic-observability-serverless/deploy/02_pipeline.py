@@ -1,9 +1,9 @@
-"""Step 1b: pipeline IAM role, S3 dead-letter bucket, index templates, and the OpenSearch Ingestion pipeline.
+"""Step 2: pipeline IAM role, S3 dead-letter bucket, index templates, and the OpenSearch Ingestion pipeline.
 
 Creates (idempotent):
   IAM role        <name>-pipeline-role   trusted by osis-pipelines.amazonaws.com; aoss:APIAccessAll on the collection,
                                          s3:PutObject on the DLQ prefix
-  S3 bucket       <dlq-bucket>           rejected documents land under dlq/traces/ and dlq/logs/
+  S3 bucket       <dlq-bucket>           rejected documents land under dlq/<name>/traces/ and dlq/<name>/logs/
   index templates                        from ../pipeline/index-templates/*.json (must exist before the first document)
   CloudWatch log group /aws/vendedlogs/OpenSearchIngestion/<name>-otlp/audit-logs
   OSIS pipeline   <name>-otlp            from ../pipeline/pipeline.yaml with placeholders filled, 1-2 units, logging on

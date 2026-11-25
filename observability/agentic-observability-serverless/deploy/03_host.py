@@ -1,4 +1,4 @@
-"""Step 2: EC2 host running the OpenTelemetry Demo with the additions in ../demo-app/.
+"""Step 3: EC2 host running the OpenTelemetry Demo with the additions in ../demo-app/.
 
 Creates (idempotent):
   IAM role + instance profile  <name>-host-role   osis:Ingest on the pipeline, bedrock:InvokeModel* on the two model
@@ -14,8 +14,7 @@ Usage:
   python deploy/03_host.py --name agentobs --region us-east-1 --profile default --subnet subnet-xxxxxxxx
   (outside the US, add --model-prefix eu / apac / global to use that region's Bedrock inference profiles)
 First spans reach the collection about 15-25 minutes after launch (image pulls). Reach the shop UI afterwards with
-  aws ssm start-session --target <instance-id> --document-name AWS-StartPortForwardingSession \
-      --parameters "portNumber=8080,localPortNumber=8080"      -> http://localhost:8080
+  aws ssm start-session --target <instance-id> --document-name AWS-StartPortForwardingSession --parameters "portNumber=8080,localPortNumber=8080"      -> http://localhost:8080
 """
 import argparse
 import base64
@@ -270,6 +269,9 @@ def main():
         if info and info[0]["PingStatus"] == "Online":
             print(f"instance {iid}: SSM online; bootstrap continues (watch /var/log/bootstrap.log, ~15-25 min)")
             print(f"INSTANCE_ID={iid}")
+            print(f"Shop web page (optional, needs the Session Manager plugin): aws ssm start-session --target {iid} "
+                  f"--region {a.region} --document-name AWS-StartPortForwardingSession "
+                  f"--parameters portNumber=8080,localPortNumber=8080  then open http://localhost:8080")
             return 0
     print(f"INSTANCE_ID={iid} (SSM not online yet)")
     return 0
