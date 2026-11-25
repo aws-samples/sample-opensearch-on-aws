@@ -48,36 +48,42 @@ logger emits twice. See the
 
 ## Prerequisites
 
-- bash (Git Bash on Windows), `jq`, Python 3.10 or later, `pip install -r requirements.txt` (pytest and PyYAML for the
-  tests; the scripts themselves use the standard library), and `pip install awscurl`.
-- AWS CLI 2.35.14 or later. `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an older
-  CLI, create the domain in the console and run every other command as written.
-- An IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM, CloudWatch Logs, and
-  Bedrock, and model access enabled for Anthropic Claude Haiku 5.5 and Sonnet 5.5 in your Region (Bedrock console >
-  Model access).
-- About an hour end to end; the AWS waits are about 15 minutes of it.
+- **Region:** any Region where the Optimized engine and Anthropic Claude Haiku 5.5 and Sonnet 5.5 on Amazon Bedrock are
+  available. `demo/litellm/config.yaml` uses the `us.` cross-Region inference profiles; outside the US, change the
+  prefix to `eu.` or `apac.` and update the two ARNs in `iam/host-role-policy.json`.
+- **OpenSearch version:** the newest OpenSearch 3.x the service offers. 3.7 is the minimum.
+- **Tools:** bash, `jq`, Python 3.10 or later, `pip install -r requirements.txt` (pytest and PyYAML, for the tests),
+  and `pip install awscurl`. On Windows, use Git Bash, not WSL.
+- **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
+  older CLI, create the domain in the console and run every other command as written.
+- **Permissions:** an IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM,
+  CloudWatch Logs, and Bedrock.
+- **Bedrock model access** for the two models. Check with:
+  ```bash
+  aws bedrock-runtime converse --model-id us.anthropic.claude-haiku-5-5 --messages '[{"role":"user","content":[{"text":"hi"}]}]' --query 'output.message.content[0].text'
+  ```
+- **Cost:** about $1.05 an hour while it runs, at November 2026 list prices in us-east-1: two `or2.large.search` nodes
+  at $0.20, one ingestion OCU at $0.24, one `m6i.2xlarge` at $0.384, and about $0.01 of storage. Bedrock calls from
+  the demo's load generator are extra. Run `scripts/cleanup.sh --delete` when you are done.
+- **Time:** about an hour end to end; the AWS waits are about 15 minutes of it.
 
 ## Deploying with a coding agent
 
-This README is written so a coding agent can run it. If you are an agent, first resolve the values below from
-`config.env`, `aws sts get-caller-identity`, `aws opensearch list-versions`, and the AWS pricing page for the Region.
-Then send the person this short plan and wait for their approval before creating anything:
+This README is written so a coding agent can run it. If you are an agent: check the prerequisites first, fixing or
+working around anything the README allows. Then send the person this message, filled in, and wait:
 
-> Ready to set up the sample. Nothing created yet.
+> Hi! I'll set up the OpenTelemetry optimized-engine sample. Nothing is created yet.
 >
-> - **Where:** account `<account id>`, `<region>`, as `<identity>`
-> - **What:** an OpenSearch `<version>` domain on the Optimized engine (2 x or2.large), an ingestion pipeline, and one m6i.2xlarge running the OpenTelemetry Demo with Amazon Bedrock
-> - **Cost:** about `<estimate>` an hour while running, plus Bedrock calls
-> - **Time:** about an hour
-> - **Undo:** everything is tagged `project=<PROJECT_TAG>`; `scripts/cleanup.sh --delete` removes it
-> - **To open OpenSearch UI:** which IAM user or role do you sign in to the AWS console with? I'll give it access.
+> - **Account:** `<account id>` in `<region>`, as `<identity>`
+> - **Builds:** an OpenSearch `<version>` domain on the Optimized engine, an ingestion pipeline, and an EC2 instance running the OpenTelemetry Demo with Amazon Bedrock
+> - **Cost:** about $1.05 an hour while it runs, plus Bedrock calls
+> - **Takes:** about an hour. **Undo:** `scripts/cleanup.sh --delete`
 >
-> Reply **ok**, or ask for the full resource list.
+> Which IAM user or role do you sign in to the AWS console with? I'll give it access to OpenSearch UI. Then reply **ok** to start.
 
-Keep the plan to these lines. Add at most three choices, one line each, and only where you depart from this README or
-are unsure. Give the full resource list (names, sizes, per-item cost) only when asked. Do not continue until the
-person approves. When Agent Traces in OpenSearch UI lists traces from the demo, say so, and list every step where this
-README was unclear or wrong.
+Send only this. Add a note only if something blocks you or needs a decision, at most two notes, one short line each.
+Do not explain your reasoning or list what you checked. Do not create anything until the person replies. When Agent
+Traces in OpenSearch UI lists traces from the demo, say so, and list every step where this README was unclear or wrong.
 
 ## Deployment
 
