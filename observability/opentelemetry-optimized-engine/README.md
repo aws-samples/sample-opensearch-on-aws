@@ -59,24 +59,24 @@ logger emits twice. See the
 
 ## Deploying with a coding agent
 
-This README is written so a coding agent can run it. If you are an agent, do this first: read `config.env`, resolve
-the values below, show them to the person, and wait for their approval before creating anything.
+This README is written so a coding agent can run it. If you are an agent, first resolve the values below from
+`config.env`, `aws sts get-caller-identity`, `aws opensearch list-versions`, and the AWS pricing page for the Region.
+Then send the person this short plan and wait for their approval before creating anything:
 
-> Hi. I'm about to set up the OpenTelemetry optimized-engine sample. Here is the plan:
+> Ready to set up the sample. Nothing created yet.
 >
-> - **Account and Region:** `<account id>` (`<identity>`), `<region>`
-> - **OpenSearch domain:** `<DOMAIN_NAME>`, Optimized engine, OpenSearch `<newest 3.x version>`, 2 x or2.large.search, 20 GB gp3 per node, fine-grained access control with `<ADMIN_ARN>` as master user
-> - **OpenSearch Ingestion pipeline:** `<PIPELINE_NAME>`, 1 to 4 OCUs
-> - **EC2 instance:** m6i.2xlarge, Amazon Linux 2023, 60 GB, running the OpenTelemetry Demo 3.1.0 with its shopping agent calling Amazon Bedrock (Claude Haiku 5.5 and Sonnet 5.5)
-> - **Also:** two S3 buckets, two IAM roles, a CloudWatch log group, an OpenSearch UI application
-> - **Tag on everything:** `project=<PROJECT_TAG>`, so `scripts/cleanup.sh` can remove it all
-> - **Approximate cost while running:** about `<estimate>` per hour at list prices in this Region, plus Bedrock usage from the demo's load generator
+> - **Where:** account `<account id>`, `<region>`, as `<identity>`
+> - **What:** an OpenSearch `<version>` domain on the Optimized engine (2 x or2.large), an ingestion pipeline, and one m6i.2xlarge running the OpenTelemetry Demo with Amazon Bedrock
+> - **Cost:** about `<estimate>` an hour while running, plus Bedrock calls
+> - **Time:** about an hour
+> - **Undo:** everything is tagged `project=<PROJECT_TAG>`; `scripts/cleanup.sh --delete` removes it
 >
-> It takes about an hour. Reply **ok** to proceed, or tell me what to change.
+> Reply **ok**, or ask for the full resource list.
 
-Fill in the angle brackets from `config.env`, `aws sts get-caller-identity`, `aws opensearch list-versions`, and the
-AWS pricing page for the Region. Do not continue until the person approves. When Agent Traces in OpenSearch UI lists
-traces from the demo, say so, and list every step where this README was unclear or wrong.
+Keep the plan to these lines. Add at most three choices, one line each, and only where you depart from this README or
+are unsure. Give the full resource list (names, sizes, per-item cost) only when asked. Do not continue until the
+person approves. When Agent Traces in OpenSearch UI lists traces from the demo, say so, and list every step where this
+README was unclear or wrong.
 
 ## Deployment
 
