@@ -164,7 +164,8 @@ def test_user_data_fails_fast_pins_the_demo_and_protects_secrets():
     assert "git checkout 3.1.0" in u
     assert "chmod 600" in u and "litellm.env" in u
     assert "{{{{" not in u
-    assert "compose.extras.yaml" in u
+    # the upstream 3.1.0 health checks work; an override with bash broke recommendation (no bash in the image)
+    assert "compose.extras.yaml" not in u
     assert len(u.encode()) < 16 * 1024
 
 def test_demo_pins_images():

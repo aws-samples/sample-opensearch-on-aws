@@ -22,6 +22,6 @@ for i in $(seq 1 80); do
   ST=$(aws osis get-pipeline --pipeline-name {{PIPELINE_NAME}} --region {{REGION}} --query Pipeline.Status --output text 2>/dev/null || echo UNKNOWN)
   echo "pipeline status: $ST"; [ "$ST" = "ACTIVE" ] && break; sleep 30
 done
-make start-agentic DOCKER_COMPOSE_FILES_AGENT="-f compose.agent.yaml -f compose.bedrock.yaml -f compose.patches.yaml -f compose.extras.yaml"
+make start-agentic DOCKER_COMPOSE_FILES_AGENT="-f compose.agent.yaml -f compose.bedrock.yaml -f compose.patches.yaml"
 sleep 60
 docker ps --format '{{.Names}} {{.Status}}' | sort

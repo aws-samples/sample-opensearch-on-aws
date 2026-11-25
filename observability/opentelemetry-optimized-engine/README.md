@@ -53,7 +53,8 @@ logger emits twice. See the
   prefix to `eu.` or `apac.` and update the two ARNs in `iam/host-role-policy.json`.
 - **OpenSearch version:** the newest OpenSearch 3.x the service offers. 3.7 is the minimum.
 - **Tools:** bash, `jq`, Python 3.10 or later, `pip install -r requirements.txt` (pytest and PyYAML, for the tests),
-  and `pip install awscurl`. On Windows, use Git Bash, not WSL.
+  and `pip install awscurl`. On Windows, use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that
+  may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
   older CLI, create the domain in the console and run every other command as written.
 - **Permissions:** an IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM,
@@ -95,6 +96,7 @@ the tag `project=$PROJECT_TAG`; `scripts/cleanup.sh` deletes only resources that
 cp config.env.example config.env   # edit
 python scripts/render.py
 set -a; source config.env; set +a; export AWS_DEFAULT_REGION=$REGION   # the aws CLI does not read config.env
+export MSYS_NO_PATHCONV=1   # Git Bash only: keep arguments such as /aws/vendedlogs/... as they are
 for t in aws jq python awscurl; do command -v $t >/dev/null || echo "missing: $t"; done
 TAG="Key=project,Value=$PROJECT_TAG"
 ```
@@ -139,7 +141,8 @@ TAG="Key=project,Value=$PROJECT_TAG"
    ```
    Map the pipeline role into `all_access` **additively**. The file lists your `ADMIN_ARN` in both `backend_roles`
    (matches an IAM role) and `users` (matches an IAM user), so you stay in; a PUT with only the pipeline role locks
-   you out.
+   you out. If you will open OpenSearch UI with another identity, add its role ARN
+   (`arn:aws:iam::<account>:role/<role>`) to `backend_roles` in `rendered/iam/all-access-rolesmapping.json` first.
    ```bash
    awscurl --service es --region $REGION -X PUT "https://$DOMAIN_ENDPOINT/_plugins/_security/api/rolesmapping/all_access" \
      -H "Content-Type: application/json" -d @rendered/iam/all-access-rolesmapping.json
