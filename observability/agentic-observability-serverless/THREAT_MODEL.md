@@ -36,7 +36,7 @@ Components:
 
 | Boundary | Components | Trust level |
 |---|---|---|
-| Internet | None exposed. The demo UI is reached only via SSM port forwarding | Untrusted |
+| Internet | None exposed. The shop UI is reached only via SSM port forwarding | Untrusted |
 | EC2 host | Demo containers, LiteLLM (loopback only), Collector | Semi-trusted (synthetic traffic, instance role) |
 | AWS services | Bedrock, OpenSearch Ingestion, OpenSearch Serverless, OpenSearch UI, IAM, CloudWatch | Trusted |
 | Operator workstation | Evaluation job, AWS CLI, browser | Trusted (IAM identity) |
@@ -102,7 +102,7 @@ Components:
 | Encryption at rest | Enabled | OpenSearch Serverless (AWS-owned key via the encryption policy); EBS root volume created with `Encrypted: true`; S3 default encryption on the DLQ bucket |
 | Authentication | IAM only | No basic auth or API keys for AWS services; LiteLLM master key is local to the host |
 | Least privilege | Scoped | Example policies in `iam/` |
-| Network exposure | None inbound | Demo UI via SSM port forward; LiteLLM loopback only |
+| Network exposure | None inbound | Shop UI via SSM port forward; LiteLLM loopback only |
 | Logging | Enabled | OpenSearch Ingestion pipeline logs; CloudTrail; SSM session logging recommended |
 | Data retention | Configured | `index.data.retention` in every index template |
 
@@ -116,7 +116,7 @@ Components:
 | Category | Level for this sample | Notes |
 |---|---|---|
 | Authentication / authorization | LOW | IAM everywhere, scoped policies |
-| Data protection | MEDIUM | Full conversation content is recorded by design; acceptable for synthetic demo data, requires review for real users |
+| Data protection | MEDIUM | Full conversation content is recorded by design; acceptable for synthetic data, requires review for real users |
 | Availability / cost | LOW | Bounded by pipeline units, OCU caps and per-conversation evaluation |
 | Network | LOW | No inbound exposure; public collection endpoint by default |
 

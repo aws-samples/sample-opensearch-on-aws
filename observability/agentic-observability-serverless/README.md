@@ -1,6 +1,6 @@
 # Agentic observability on Amazon OpenSearch Serverless
 
-How the re:Invent 2026 kiosk demo "Agentic Observability with Amazon OpenSearch" was built: an e-commerce
+This end-to-end sample shows how to observe and evaluate an AI agent with Amazon OpenSearch: an e-commerce
 application with an AI shopping assistant, its OpenTelemetry data in an OpenSearch Serverless time series
 collection, three dashboards in OpenSearch UI (business health, AI cost, AI quality), and an online evaluation
 job that scores every assistant conversation against what its tools actually returned.
@@ -14,7 +14,7 @@ store that OpenSearch UI can also read (not used in this sample).
 
 ![Architecture: OpenTelemetry Demo, OpenTelemetry Collector, Amazon OpenSearch Ingestion, Amazon OpenSearch Serverless and OpenSearch UI in a row; Amazon Bedrock above, linked to the demo (agent models) and to the collection (online evaluation); Amazon Managed Prometheus below as optional](docs/images/architecture.png)
 
-## What the demo shows
+## What the sample shows
 
 The Astronomy Shop is an online store with twenty microservices and an AI shopping assistant that answers
 questions ("What's the cheapest telescope?", "Any promotions on binoculars?", "What does shipping to Sydney cost?")
@@ -26,13 +26,13 @@ through three OpenSearch UI dashboards:
    healthy, and nothing on it says whether the assistant's answers were right.
 2. **AI assistant: cost**: conversations, model calls, tokens, spend at list prices, cost per conversation, which
    tools the assistant calls, response time. The assistant runs on two models (Claude Haiku 5.5 for 70% of
-   conversations, Claude Sonnet 5.5 for 30%); in our run Sonnet accounted for about nine tenths of the spend.
+   conversations, Claude Sonnet 5.5 for 30%); in a test run Sonnet accounted for about nine tenths of the spend.
 3. **AI assistant: quality**: the output of online evaluation. Every ten minutes an evaluation job takes each new
    conversation from the trace data (the shopper's question, the assistant's final answer, and the raw results its
    tools returned), sends them to an evaluation model on Amazon Bedrock with a fixed rubric (correct, relevant,
    helpful, 1–5; hallucination flag), and writes the score next to the trace.
 
-What the evaluation found in our run: both models scored within 0.1 of each other (about 4.5 / 5), at a twentieth
+What the evaluation found in a test run: both models scored within 0.1 of each other (about 4.5 / 5), at a twentieth
 of the cost per conversation for Haiku. Every low-scoring conversation was a "buy" request: the shop's checkout
 service returned HTTP 500, the assistant's checkout tool reported Success (the function completed and returned the
 error as text), the assistant told the shopper it was rebuilding the cart, and the HTTP request returned 200 OK.
@@ -43,7 +43,7 @@ to the failing span, and one PPL query in Query Workbench lists every affected c
 |---|---|---|
 | Application | [OpenTelemetry Demo](https://github.com/open-telemetry/opentelemetry-demo) 3.1.0 with its agentic layer | 20 microservices, a LangGraph shopping assistant, load generator |
 | Models | Amazon Bedrock: Claude Haiku 5.5 (70%), Claude Sonnet 5.5 (30%) via a LiteLLM proxy | instance-role credentials, no keys |
-| Collection | OTel Collector (in the demo) → OTLP/HTTP with SigV4 | one Collector pipeline per OSIS exporter |
+| Collection | OTel Collector (in the OpenTelemetry Demo) → OTLP/HTTP with SigV4 | one Collector pipeline per OSIS exporter |
 | Ingestion | Amazon OpenSearch Ingestion, `otlp` source, `otel_traces` processor, `custom` index type | Serverless sinks use `index_type: custom`; the mapping comes from `pipeline/index-templates/` |
 | Storage | Amazon OpenSearch Serverless, time series collection (next generation) | scales to zero; every document needs the index's timestamp field |
 | Evaluation | Python job calling Bedrock, writing scores next to the traces | every 10 minutes, ~1 cent per conversation |
@@ -66,7 +66,8 @@ Each script is idempotent and prints the identifiers the next one needs.
    the script reports the user data over the 16 KiB limit): host IAM role, security group and an EC2
    instance whose user data clones the OpenTelemetry Demo at tag 3.1.0, applies the additions in `demo-app/`
    (live models on Bedrock, weighted model mix, realistic shopper questions), points the Collector at the pipeline
-   and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions. If RunInstances reports InsufficientInstanceCapacity, re-run with a public subnet in another Availability Zone or another 8 vCPU / 32 GiB type via --instance-type (for example 7a.2xlarge); the role and security group are reused.
+   and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions. If RunInstances reports InsufficientInstanceCapacity, re-run with a public subnet in another Availability Zone or another 8 vCPU / 32 GiB type via --instance-type (for example 
+7a.2xlarge); the role and security group are reused.
 4. **OpenSearch UI** (`deploy/04_ui.md`, ~15 min): application, workspace, datasets, and a query to confirm data is
    arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
 5. **Online evaluation** (`evaluation/README.md`): run `score_live.py` once, then on a timer; build dashboard 3 from
@@ -137,7 +138,7 @@ Placeholders to replace: `<account-id>`, `<region>`, `<collection-id>`, `<collec
 
 ## Security
 
-See `THREAT_MODEL.md`. The demo records full conversation content in traces and uses synthetic shoppers only.
+See `THREAT_MODEL.md`. The sample records full conversation content in traces and uses synthetic shoppers only.
 
 ## License
 

@@ -49,7 +49,7 @@ from `aws osis get-pipeline --pipeline-name <name>-otlp --query 'Pipeline.Ingest
 
 - The agent's OTel exporter stops with "Queue full, dropping Span" if the Collector is unreachable for a while and
   does not resume on its own. Restart the `agent` container after any Collector or pipeline change; a small watchdog
-  that restarts it when no spans arrive is cheap insurance for an unattended demo.
+  that restarts it when no spans arrive is cheap insurance for an unattended deployment.
 - Token cost at the load generator's default rate (two users): roughly USD 3/day on Haiku only, 8–10/day with the
   70/30 mix, at list prices.
 - LiteLLM does not pass `temperature` to Claude 5.5 models (the API rejects it); `drop_params: true` handles this.
