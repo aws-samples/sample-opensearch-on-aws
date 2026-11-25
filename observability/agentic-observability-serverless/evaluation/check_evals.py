@@ -4,6 +4,7 @@ import sys
 import boto3
 from opensearchpy import OpenSearch, RequestsAWSV4SignerAuth, RequestsHttpConnection
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 5
 s = boto3.Session(profile_name=os.environ.get("AWS_PROFILE"))
 d = s.client("opensearchserverless", region_name=os.environ.get("AWS_REGION", "us-east-1")).batch_get_collection(names=[os.environ.get("AOSS_COLLECTION", "agentobs-ts")])["collectionDetails"][0]

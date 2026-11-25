@@ -1,9 +1,12 @@
 # Agentic observability on Amazon OpenSearch Serverless
 
-This end-to-end sample shows how to observe and evaluate an AI agent with Amazon OpenSearch: an e-commerce
-application with an AI shopping assistant, its OpenTelemetry data in an OpenSearch Serverless time series
-collection, three dashboards in OpenSearch UI (business health, AI cost, AI quality), and an online evaluation
-job that scores every assistant conversation against what its tools actually returned.
+An end-to-end sample for observing and evaluating an AI shopping assistant with Amazon OpenSearch Serverless. The
+sample uses the OpenTelemetry Demo e-commerce application to collect traces and logs through Amazon OpenSearch
+Ingestion into a next-generation OpenSearch Serverless time series collection.
+
+Follow the deployment scripts and recipes to build OpenSearch UI dashboards for business health, AI cost and AI
+quality, and run an online evaluation job that scores each conversation against what the assistant's tools returned.
+Adapt these patterns to your own instrumented applications and agents.
 
 The diagram below shows the data flow, left to right: the OpenTelemetry Demo (signal producer) emits traces and logs
 through its OpenTelemetry Collector to an Amazon OpenSearch Ingestion pipeline, which transforms them and writes to an
@@ -111,10 +114,13 @@ Approximate, us-east-1, at the load generator's default rate (two simulated user
 ```bash
 python deploy/99_cleanup.py --name agentobs --region us-east-1 --dlq-bucket <dlq-bucket>
 ```
-Deletes, in reverse order, everything the deploy scripts created: the EC2 instance, security group and host role; the
-OpenSearch UI application; the pipeline and its log group; the DLQ bucket (emptied first); the pipeline role; the
-collection, its policies and the collection group. Stop the evaluation job first. The workspace and dashboards live
-inside the application and go with it.
+Deletes, in reverse order, what the deploy scripts created: the EC2 instance, security group and host role; the
+OpenSearch UI application; the pipeline and its log group; the pipeline role; the collection, its policies and the
+collection group. Each resource is deleted only if it carries the tag `project=agentic-observability-serverless`
+that the deploy scripts set; anything else with a matching name is listed and left alone. In the DLQ bucket only
+objects under `dlq/` are removed (and under `--demo-app-s3`, if you used it); the bucket itself is deleted only if
+the sample created it and it is then empty. Stop the evaluation job first. The workspace and dashboards live inside
+the application and go with it.
 ## Repository layout
 
 ```

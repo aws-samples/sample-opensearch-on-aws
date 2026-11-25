@@ -46,7 +46,7 @@ otel-logs-pipeline:
         dlq:
           s3:
             bucket: "<dlq-bucket>"
-            key_path_prefix: "dlq/logs/"
+            key_path_prefix: "dlq/<prefix>/logs/"
             region: "<region>"
             sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"
 
@@ -163,6 +163,6 @@ otel-traces-pipeline:
         dlq:
           s3:
             bucket: "<dlq-bucket>"
-            key_path_prefix: "dlq/traces/"
+            key_path_prefix: "dlq/<prefix>/traces/"
             region: "<region>"
             sts_role_arn: "arn:aws:iam::<account-id>:role/<pipeline-role>"

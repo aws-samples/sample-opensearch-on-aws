@@ -156,10 +156,11 @@ def price(model, tin, tout):
     return None
 
 
-def list_roots(os_client, since, until, limit):
-    roots, search_after = [], None
-    while len(roots) < limit:
-        body = {"size": min(500, limit - len(roots)),
+def iter_root_pages(os_client, since, until, page=500):
+    """Yield pages of conversation root spans in [since, until), oldest first, until the window is exhausted."""
+    search_after = None
+    while True:
+        body = {"size": page,
                 "query": {"bool": {"filter": [{"term": {"serviceName": "agent"}}, {"term": {"name": ROOT_NAME}},
                                               {"range": {"startTime": {"gte": since, "lt": until}}}]}},
                 "sort": [{"startTime": "asc"}, {"spanId": "asc"}],
@@ -167,21 +168,31 @@ def list_roots(os_client, since, until, limit):
                             "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]}
         if search_after:
             body["search_after"] = search_after
-        r = os_client.search(index=SPAN_INDEX, body=body)
-        hits = r["hits"]["hits"]
+        hits = os_client.search(index=SPAN_INDEX, body=body)["hits"]["hits"]
         if not hits:
-            break
-        roots.extend(h["_source"] for h in hits)
+            return
+        yield [h["_source"] for h in hits]
         search_after = hits[-1]["sort"]
-        if len(hits) < body["size"]:
-            break
-    # a conversation may still have duplicate roots if any slipped through: keep one per traceId
-    seen, uniq = set(), []
-    for r in roots:
-        if r["traceId"] not in seen:
-            seen.add(r["traceId"])
-            uniq.append(r)
-    return uniq
+        if len(hits) < page:
+            return
+
+
+def next_unscored(os_client, since, until, limit, skip=frozenset()):
+    """Oldest unscored conversations in the window, at most `limit`. Returns (todo, total_seen, window_exhausted).
+    Already-scored traces and traces in `skip` (given up) do not count against the limit."""
+    todo, seen, total = [], set(), 0
+    for page in iter_root_pages(os_client, since, until):
+        page = [r for r in page if r["traceId"] not in seen]  # one root per traceId
+        seen.update(r["traceId"] for r in page)
+        total += len(page)
+        done = already_scored(os_client, [r["traceId"] for r in page])
+        for r in page:
+            if r["traceId"] in done or r["traceId"] in skip:
+                continue
+            if len(todo) >= limit:
+                return todo, total, False
+            todo.append(r)
+    return todo, total, True
 
 
 def already_scored(os_client, trace_ids):
@@ -319,19 +330,31 @@ def clamp(v):
         return None
 
 
+def accept_verdict(verdict):
+    """All three scores present, numeric and within 1..5, and a boolean hallucination flag; else None (caller retries)."""
+    scores = {}
+    for k in ("correct", "relevant", "helpful"):
+        v = verdict.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 1 <= float(v) <= 5:
+            return None
+        scores[k] = float(v)
+    if not isinstance(verdict.get("hallucination"), bool):
+        return None
+    return scores, verdict["hallucination"]
+
+
 def score_one(br, item, model_id, run_id):
     verdict, jin, jout, raw = judge(br, item, model_id)
-    sc = {k: clamp(verdict.get(k)) for k in ("correct", "relevant", "helpful")}
-    vals = [v for v in sc.values() if v is not None]
-    if not vals:  # never store a document without a score; let the caller retry
-        raise RuntimeError(f"no verdict parsed: {raw[:120]!r}")
-    overall = round(sum(vals) / len(vals), 2) if vals else None
-    halluc = bool(verdict.get("hallucination", False))
+    accepted = accept_verdict(verdict)
+    if accepted is None:  # incomplete or malformed verdict: never store it, let the caller retry
+        raise RuntimeError(f"incomplete verdict: {raw[:120]!r}")
+    sc, halluc = accepted
+    overall = round(sum(sc.values()) / 3, 2)
     doc = {k: v for k, v in item.items() if not k.startswith("_")}
     doc.update({
         "score_correct": sc["correct"], "score_relevant": sc["relevant"], "score_helpful": sc["helpful"], "score_overall": overall,
         "hallucination": halluc,
-        "label": ("fail" if (overall is None or overall < 3.5 or halluc or item["error"] or not item["answered"]) else "pass"),
+        "label": ("fail" if (overall < 3.5 or halluc or item["error"] or not item["answered"]) else "pass"),
         "explanation": (verdict.get("reason") or raw[:500])[:500],
         "judge_model": model_id, "judge_input_tokens": jin, "judge_output_tokens": jout, "judge_cost_usd": price(model_id, jin, jout),
         "eval_type": "online", "eval_run_id": run_id, "eval_version": EVAL_VERSION,
@@ -340,14 +363,14 @@ def score_one(br, item, model_id, run_id):
     return doc
 
 
-def run_once(os_client, br, args, run_id):
-    until = args.until or (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=args.settle)).isoformat()
-    roots = list_roots(os_client, args.since, until, args.limit)
-    done = already_scored(os_client, [r["traceId"] for r in roots])
-    todo = [r for r in roots if r["traceId"] not in done]
-    log(f"window {args.since} -> {until[:19]}Z: {len(roots)} conversations, {len(done)} already scored, {len(todo)} to score")
+def run_once(os_client, br, args, run_id, since, until, give_up):
+    """One pass. Returns (scored, next_since, backlog_left). next_since never moves past an unscored conversation:
+    it is the oldest failed conversation still being retried, else the last conversation of a partial batch, else until."""
+    todo, total, exhausted = next_unscored(os_client, since, until, args.limit, give_up)
+    log(f"window {since} -> {until[:19]}Z: {total} conversations seen, {len(todo)} to score"
+        + ("" if exhausted else f" (batch limit {args.limit}; more remain)"))
     if not todo:
-        return 0
+        return 0, until, False  # everything in the window is scored or given up
 
     if args.dry_run:
         for r in todo[: min(len(todo), args.dry_run_show)]:
@@ -359,7 +382,6 @@ def run_once(os_client, br, args, run_id):
             print(f"Q: {item['question']}")
             print(f"A: {item['answer'][:600]}")
             print(f"EVIDENCE ({len(item['_evidence'])} chars): {item['_evidence'][:500]} ...")
-        # evidence-size estimate for cost
         sizes = []
         for r in todo[:30]:
             it = assemble(r, fetch_trace(os_client, r["traceId"]))
@@ -367,9 +389,9 @@ def run_once(os_client, br, args, run_id):
         avg_tokens = (sum(sizes) / max(1, len(sizes))) / 4
         est = len(todo) * (avg_tokens / 1e6 * PRICES["sonnet"][0] + 120 / 1e6 * PRICES["sonnet"][1])
         log(f"DRY RUN: no Bedrock calls, no writes. ~{avg_tokens:.0f} judge input tokens/conversation -> est. ${est:.2f} for {len(todo)} conversations with Sonnet")
-        return 0
+        return 0, since, False
 
-    docs, failures = [], 0
+    docs, failed = [], []
     t0 = time.time()
 
     def work(r):
@@ -377,16 +399,16 @@ def run_once(os_client, br, args, run_id):
             try:
                 item = assemble(r, fetch_trace(os_client, r["traceId"]))
                 return score_one(br, item, args.judge_model, run_id)
-            except Exception as e:  # throttling, transient network
+            except Exception as e:  # throttling, transient network, incomplete verdict
                 if attempt == 3:
                     log(f"FAILED {r['traceId']}: {type(e).__name__}: {str(e)[:160]}")
                     return None
                 time.sleep(2 ** attempt + random.random())
 
     with cf.ThreadPoolExecutor(max_workers=args.workers) as ex:
-        for i, doc in enumerate(ex.map(work, todo), 1):
+        for i, (r, doc) in enumerate(zip(todo, ex.map(work, todo)), 1):
             if doc is None:
-                failures += 1
+                failed.append(r)
             else:
                 docs.append(doc)
             if len(docs) >= 50:
@@ -394,19 +416,32 @@ def run_once(os_client, br, args, run_id):
                 docs = []
             if i % 25 == 0 or i == len(todo):
                 rate = i / max(1, time.time() - t0)
-                log(f"  {i}/{len(todo)} scored  ({rate * 60:.0f}/min, {failures} failed)")
+                log(f"  {i}/{len(todo)} scored  ({rate * 60:.0f}/min, {len(failed)} failed)")
     if docs:
         helpers.bulk(os_client, ({"_index": EVAL_INDEX, "_source": d} for d in docs), request_timeout=60)
-    return len(todo) - failures
+
+    # retry bookkeeping: a conversation that fails on --max-retry-passes consecutive passes is given up and logged
+    for r in failed:
+        args.failed_passes[r["traceId"]] = args.failed_passes.get(r["traceId"], 0) + 1
+        if args.failed_passes[r["traceId"]] >= args.max_retry_passes:
+            give_up.add(r["traceId"])
+            log(f"GIVING UP on {r['traceId']} (started {r['startTime']}) after {args.max_retry_passes} passes")
+    pending = [r["startTime"] for r in failed if r["traceId"] not in give_up]
+    if not exhausted:
+        pending.append(todo[-1]["startTime"])
+    next_since = min(pending) if pending else until
+    return len(todo) - len(failed), next_since, not exhausted
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # answers can contain any script
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile", default=None, help="AWS profile; default uses the environment credential chain")
     ap.add_argument("--since", required=True, help="ISO time, e.g. 2026-11-18T02:10:00Z")
     ap.add_argument("--until", default=None, help="ISO time; default = now minus --settle seconds")
     ap.add_argument("--settle", type=int, default=120, help="only score conversations older than this many seconds, so all child spans have landed")
-    ap.add_argument("--limit", type=int, default=5000)
+    ap.add_argument("--limit", type=int, default=5000, help="max conversations scored per pass; the rest are scored on the next pass")
+    ap.add_argument("--max-retry-passes", type=int, default=5, help="give up on a conversation after it fails on this many passes")
     ap.add_argument("--judge-model", default=JUDGE_MODEL)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--dry-run", action="store_true", help="assemble evidence only: no Bedrock, no index creation, no writes")
@@ -414,6 +449,7 @@ def main():
     ap.add_argument("--loop", type=int, default=0, help="seconds between passes; 0 = run once")
     ap.add_argument("--reset-index", action="store_true", help="DELETE the agent-evals index first and start clean")
     args = ap.parse_args()
+    args.failed_passes = {}
 
     os_client, br = clients(args.profile)
     run_id = f"{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:6]}"
@@ -424,15 +460,15 @@ def main():
     if not args.dry_run:
         log(f"index {EVAL_INDEX}: {'created' if ensure_index(os_client) else 'exists'}")
     log(f"run {run_id}  judge={args.judge_model}  workers={args.workers}")
+    since, give_up = args.since, set()
     while True:
-        n = run_once(os_client, br, args, run_id)
-        log(f"pass done: {n} new score documents")
-        if not args.loop or args.dry_run:
+        until = args.until or (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=args.settle)).isoformat()
+        n, since, backlog = run_once(os_client, br, args, run_id, since, until, give_up)
+        log(f"pass done: {n} new score documents; next window starts {since}")
+        if args.dry_run or (not args.loop and not backlog):
             break
-        # next pass: only look back a little (new conversations), still de-duplicated by traceId
-        args.since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=args.loop * 3)).isoformat()
-        args.until = None
-        time.sleep(args.loop)
+        if not backlog:  # caught up: wait for new conversations; with a backlog, continue immediately
+            time.sleep(args.loop)
 
 
 if __name__ == "__main__":
