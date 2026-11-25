@@ -59,30 +59,36 @@ Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for t
 (for example `<prefix>-dlq-<account-id>`). The scripts use us-east-1 unless you pass `--region`; they do not read
 your AWS CLI's default region. Each script is idempotent and prints the identifiers the next one needs.
 
-0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute): a short summary of the account,
-   region, what will be created, models, versions and estimated cost. It creates nothing. It asks which IAM user or
-   role you sign in to the AWS console with (it goes into `--principals`) and whether to go ahead.
+0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute, never waits for input): a short
+   summary of the account, region, what will be created, a public subnet for the host, models, versions and estimated
+   cost. It asks which IAM user or role you sign in to the AWS console with. Re-run it with
+   `--console-principal <that ARN>` and it prints the exact commands for steps 1–4.
 
 > **Coding agents:** run `deploy/00_preflight.py` first and pass its summary to the user as it is, in a few
-> lines. Ask its two questions (console sign-in identity, go ahead) and wait for "yes" before creating anything.
+> lines. Ask its questions (console sign-in identity, go ahead) and wait for "yes" before creating anything; then
+> run the commands it prints.
 > Ask again before running `deploy/99_cleanup.py`. Run the evaluation once with a small `--limit`; do not leave
 > `--loop` running on the user's machine.
 
 1. **Collection** (`deploy/01_collection.py`, ~5 min): next-generation collection group, time series collection,
    encryption, network and data access policies. Pass with `--principals` both the identity that runs the scripts and
    the IAM user or role you sign in to the AWS console with (for a role, its role ARN). OpenSearch UI shows no data to
-   anyone missing from this list. The default scales search to zero when idle; set `--min-search-ocu 2` (the smallest non-zero value the service accepts) for production, mission-critical or always-on demo workloads where the first query after an idle period must be fast.
+   anyone missing from this list. Capacity defaults to at most 4 OCU each for indexing and search (`--max-ocu`); at 2,
+   dashboard queries can time out while ingestion and evaluation run. Re-run the script with a new `--max-ocu` to
+   change an existing group. The default scales search to zero when idle; set `--min-search-ocu 2` (the smallest non-zero value the service accepts) for production, mission-critical or always-on demo workloads where the first query after an idle period must be fast.
 2. **Pipeline** (`deploy/02_pipeline.py`, ~10 min): pipeline IAM role, DLQ bucket, the index templates from
    `pipeline/index-templates/`, and the OpenSearch Ingestion pipeline from `pipeline/pipeline.yaml` with CloudWatch
    logging. Run it as one of the principals from step 1 (it applies the index templates through the collection
    endpoint). `pipeline/README.md` explains each processor. Wait a few minutes after ACTIVE before sending data.
-3. **Application** (`deploy/03_host.py`, ~25 min until spans arrive; add `--demo-app-s3 s3://<dlq-bucket>/demo-app` if
+3. **Application** (`deploy/03_host.py`, ~25 min until spans arrive; `--subnet` is a public subnet, as suggested by
+   the preflight; add `--demo-app-s3 s3://<dlq-bucket>/demo-app` if
    the script reports the user data over the 16 KiB limit): host IAM role, security group and an EC2
    instance whose user data clones the OpenTelemetry Demo at tag 3.1.0, applies the additions in `demo-app/`
    (live models on Bedrock, weighted model mix, realistic shopper questions), points the Collector at the pipeline
    and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions. If RunInstances reports InsufficientInstanceCapacity, re-run with a public subnet in another Availability Zone or another 8 vCPU / 32 GiB type via --instance-type (for example r7a.2xlarge); the role and security group are reused.
-4. **OpenSearch UI** (`deploy/04_ui.md`, ~15 min): application, workspace, datasets, and a query to confirm data is
-   arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
+4. **OpenSearch UI** (`deploy/04_ui.py`, then the console steps in `deploy/04_ui.md`, ~15 min): the script creates
+   the application and prints its endpoint; the console steps add the workspace, datasets, and a query to confirm
+   data is arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
 5. **Online evaluation** (`evaluation/README.md`): run `score_live.py` once from your workstation with a small
    `--limit` to check scoring works, then build dashboard 3 from `dashboards/dashboard-3-ai-quality.md`. Each scored
    conversation costs about 1 cent in Bedrock calls; do not leave `--loop` running on a laptop (see
@@ -120,7 +126,7 @@ Approximate, us-east-1, at the load generator's default rate (two simulated user
 | Item | Cost |
 |---|---|
 | EC2 r8a.2xlarge | ~USD 11/day |
-| OpenSearch Serverless time series collection, group min 0 / max 2 OCU | compute billed per OCU-hour while active; a few USD/day at this volume |
+| OpenSearch Serverless time series collection, group min 0 / max 4 OCU | compute billed per OCU-hour while active; a few USD/day at this volume |
 | OpenSearch Ingestion pipeline, 1–2 units | ~USD 6–12/day |
 | Bedrock, assistant (70/30 Haiku/Sonnet) | ~USD 8–10/day |
 | Bedrock, evaluation (Sonnet, ~3,000 conversations/day) | ~USD 30/day; use sampling to reduce |
@@ -141,7 +147,7 @@ the application and go with it.
 ## Repository layout
 
 ```
-deploy/              preflight check, creation scripts (collection, pipeline, host), OpenSearch UI steps, cleanup script
+deploy/              preflight check, creation scripts (collection, pipeline, host, OpenSearch UI app), console steps, cleanup script
 pipeline/            OSIS pipeline YAML, index templates, Collector exporter snippet
 demo-app/            compose overlays, LiteLLM config, agent and load-generator patches, env example, NOTICE
 evaluation/          score_live.py (online evaluation job), check_evals.py, parser test, requirements, README

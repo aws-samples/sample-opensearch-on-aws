@@ -34,7 +34,9 @@ def main():
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--profile", default=None)
     ap.add_argument("--principals", required=True, help="comma-separated IAM ARNs that get data access (operators, evaluation identity)")
-    ap.add_argument("--max-ocu", type=int, default=2, help="max indexing and search OCU for the group")
+    ap.add_argument("--max-ocu", type=int, default=4,
+                    help="max indexing and search OCU for the group (default 4; at 2, dashboard queries can time out "
+                         "while ingestion and evaluation run). Re-run with a new value to change an existing group")
     ap.add_argument("--min-search-ocu", type=int, default=0, help="0 scales search to zero when idle; 2 keeps search capacity on for production/mission-critical/always-on workloads. Allowed: 0, 2, 4, 8, 16 or multiples of 16")
     ap.add_argument("--tags", default="", help="extra tags k=v,k=v")
     a = ap.parse_args()
@@ -54,14 +56,25 @@ def main():
         {"key": kv.split("=", 1)[0], "value": kv.split("=", 1)[1]} for kv in a.tags.split(",") if "=" in kv]
 
     # 1. collection group
-    if any(g["name"] == grp for g in aoss.list_collection_groups().get("collectionGroupSummaries", [])):
-        print(f"collection group {grp}: exists")
+    limits = {"minIndexingCapacityInOCU": 0, "maxIndexingCapacityInOCU": a.max_ocu,
+              "minSearchCapacityInOCU": a.min_search_ocu, "maxSearchCapacityInOCU": a.max_ocu}
+    found = aoss.batch_get_collection_group(names=[grp]).get("collectionGroupDetails", [])
+    if found:
+        g = found[0]
+        owned = any(t.get("key") == "project" and t.get("value") == TAG_PROJECT for t in g.get("tags", []))
+        current = {k: g.get("capacityLimits", {}).get(k) for k in limits}
+        if current == limits:
+            print(f"collection group {grp}: exists")
+        elif not owned:
+            print(f"collection group {grp}: exists, not created by this sample (no project tag); capacity left as {current}")
+        else:
+            aoss.update_collection_group(id=g["id"], capacityLimits=limits)
+            print(f"collection group {grp}: capacity updated to search {a.min_search_ocu}-{a.max_ocu} OCU, "
+                  f"indexing 0-{a.max_ocu} OCU (was {current})")
     else:
         aoss.create_collection_group(
             name=grp, generation="NEXTGEN", standbyReplicas="ENABLED", tags=tags,
-            description="agentic observability sample",
-            capacityLimits={"minIndexingCapacityInOCU": 0, "maxIndexingCapacityInOCU": a.max_ocu,
-                            "minSearchCapacityInOCU": a.min_search_ocu, "maxSearchCapacityInOCU": a.max_ocu})
+            description="agentic observability sample", capacityLimits=limits)
         print(f"collection group {grp}: created (NEXTGEN, search {a.min_search_ocu}-{a.max_ocu} OCU, indexing 0-{a.max_ocu} OCU)")
 
     # 2. policies
