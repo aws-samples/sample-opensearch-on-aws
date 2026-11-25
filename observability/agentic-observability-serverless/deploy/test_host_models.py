@@ -31,3 +31,10 @@ def test_user_data_uses_pinned_versions():
     ud = host.user_data("us-east-1", "example.osis.amazonaws.com", "agentobs", {})
     assert f"--branch {host.DEMO_TAG}" in ud
     assert f"/download/{host.COMPOSE_VERSION}/" in ud
+
+
+def test_port_forward_command_is_quoted_for_powershell():
+    # an unquoted comma in --parameters would be split into two arguments by PowerShell
+    src = (HERE / "03_host.py").read_text(encoding="utf-8")
+    printed = re.search(r'--parameters (\\"[^"]+\\")\s+then open', src)
+    assert printed and printed.group(1) == '\\"portNumber=8080,localPortNumber=8080\\"'

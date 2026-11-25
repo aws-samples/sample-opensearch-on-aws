@@ -271,7 +271,7 @@ def main():
             print(f"INSTANCE_ID={iid}")
             print(f"Shop web page (optional, needs the Session Manager plugin): aws ssm start-session --target {iid} "
                   f"--region {a.region} --document-name AWS-StartPortForwardingSession "
-                  f"--parameters portNumber=8080,localPortNumber=8080  then open http://localhost:8080")
+                  f"--parameters \"portNumber=8080,localPortNumber=8080\"  then open http://localhost:8080")
             return 0
     print(f"INSTANCE_ID={iid} (SSM not online yet)")
     return 0
