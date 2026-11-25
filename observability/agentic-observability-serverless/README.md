@@ -55,21 +55,23 @@ to the failing span, and one PPL query in Query Workbench lists every affected c
 ## Build order
 
 Everything is created with the scripts in `deploy/` (Python, boto3; `pip install -r deploy/requirements.txt`).
-Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue.
-Each script is idempotent and prints the identifiers the next one needs.
+Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue
+(for example `<prefix>-dlq-<account-id>`). The scripts use us-east-1 unless you pass `--region`; they do not read
+your AWS CLI's default region. Each script is idempotent and prints the identifiers the next one needs.
 
-0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute): shows the AWS account and identity,
-   region, every resource it will create, the Bedrock models and whether they are available in the region, the
-   OpenTelemetry Demo, LiteLLM and Docker Compose versions, and an estimated daily cost. It creates nothing. In a
-   terminal it asks yes/no.
+0. **Confirm the plan** (`deploy/00_preflight.py`, read-only, under a minute): a short summary of the account,
+   region, what will be created, models, versions and estimated cost. It creates nothing. It asks which IAM user or
+   role you sign in to the AWS console with (it goes into `--principals`) and whether to go ahead.
 
-> **Coding agents:** run `deploy/00_preflight.py` first, show its output to the user, and wait for an explicit
-> "yes" before running any script that creates resources. Ask again before running `deploy/99_cleanup.py`. Run the
-> evaluation once with a small `--limit`; do not leave `--loop` running on the user's machine.
+> **Coding agents:** run `deploy/00_preflight.py` first and pass its summary to the user as it is, in a few
+> lines. Ask its two questions (console sign-in identity, go ahead) and wait for "yes" before creating anything.
+> Ask again before running `deploy/99_cleanup.py`. Run the evaluation once with a small `--limit`; do not leave
+> `--loop` running on the user's machine.
 
 1. **Collection** (`deploy/01_collection.py`, ~5 min): next-generation collection group, time series collection,
-   encryption, network and data access policies. Pass your own IAM principal(s) with `--principals`; they get data
-   access for OpenSearch UI and the evaluation job. The default scales search to zero when idle; set `--min-search-ocu 2` (the smallest non-zero value the service accepts) for production, mission-critical or always-on demo workloads where the first query after an idle period must be fast.
+   encryption, network and data access policies. Pass with `--principals` both the identity that runs the scripts and
+   the IAM user or role you sign in to the AWS console with (for a role, its role ARN). OpenSearch UI shows no data to
+   anyone missing from this list. The default scales search to zero when idle; set `--min-search-ocu 2` (the smallest non-zero value the service accepts) for production, mission-critical or always-on demo workloads where the first query after an idle period must be fast.
 2. **Pipeline** (`deploy/02_pipeline.py`, ~10 min): pipeline IAM role, DLQ bucket, the index templates from
    `pipeline/index-templates/`, and the OpenSearch Ingestion pipeline from `pipeline/pipeline.yaml` with CloudWatch
    logging. Run it as one of the principals from step 1 (it applies the index templates through the collection
@@ -108,7 +110,8 @@ names and templates; the scripts here create exactly what the rest of the sample
 - Bedrock model access granted for Anthropic Claude Haiku 5.5 and Claude Sonnet 5.5
 - An EC2 instance able to run the OpenTelemetry Demo (8 vCPU / 32 GiB recommended, Amazon Linux 2023, Docker,
   SSM agent, no inbound security-group rules)
-- Workstation: AWS CLI v2, Python 3.11+, Session Manager plugin
+- Workstation: AWS CLI v2, Python 3.11+. Optional: the Session Manager plugin, only to open the shop's web page or a
+  shell on the host (`deploy/03_host.py` prints the command); the deployment itself does not need it.
 
 ## Cost
 
