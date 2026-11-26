@@ -211,3 +211,21 @@ def test_shell_scripts_avoid_gnu_only_date_flags():
 def test_readme_runs_python_through_a_detected_interpreter():
     r = read("README.md")
     assert "$PY scripts/render.py" in r and "python scripts/render.py" not in r
+
+def load_setup_ui():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("setup_ui", os.path.join(ROOT, "scripts", "setup_ui.py"))
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+def test_console_identity_goes_to_the_right_all_access_list():
+    m = load_setup_ui()
+    assert m.mapping_entry("arn:aws:sts::111122223333:assumed-role/Admin/jane-session") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
+    assert m.mapping_entry("arn:aws:iam::111122223333:role/Admin") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
+    assert m.mapping_entry("arn:aws:iam::111122223333:user/jane") == ("users", "arn:aws:iam::111122223333:user/jane")
+
+def test_readme_uses_setup_ui_and_picked_instance_types():
+    r = read("README.md")
+    assert "$PY scripts/setup_ui.py --admins" in r
+    assert "InstanceType=$OS_TYPE" in r and "--instance-type $EC2_TYPE" in r
+    assert "InstanceType=or2.large.search" not in r and "--instance-type m6i.2xlarge" not in r
+    assert "boto3" in read("requirements.txt")

@@ -24,7 +24,7 @@ iam/         pipeline role, EC2 host role, domain access policy, fine-grained ac
 collector/   the OpenTelemetry Demo Collector override (SigV4 to the pipeline)
 demo/        OpenTelemetry Demo overlay: LiteLLM proxy to Amazon Bedrock, weighted model split, EC2 user data
 queries/     example PPL queries
-scripts/     render.py (fill placeholders), install-templates.sh, check-ingestion.sh, cleanup.sh
+scripts/     render.py (fill placeholders), install-templates.sh, check-ingestion.sh, setup_ui.py, cleanup.sh
 tests/       offline tests (python -m pytest)
 ```
 
@@ -55,9 +55,13 @@ logger emits twice. See the
   available. `demo/litellm/config.yaml` uses the `us.` cross-Region inference profiles; outside the US, change the
   prefix to `eu.` or `apac.` and update the two ARNs in `iam/host-role-policy.json`.
 - **OpenSearch version:** the newest OpenSearch 3.x the service offers. 3.7 is the minimum.
-- **Tools:** bash, `jq`, Python 3.9 or later, and `awscurl` (`python3 -m pip install awscurl`). The tests also need
-  `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says `python3`. On Windows, use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that
-  may come first on PATH.
+- **Instance types:** the first type in each list that is offered in your Region and Availability Zone. The commands
+  in steps 1 and 4 pick it for you.
+  - Domain data nodes, OpenSearch Optimized Instances: `or2.large.search`, then `or1.large.search`.
+  - Demo host (x86_64, 32 GB RAM): `m6i.2xlarge`, `m6a.2xlarge`, `m7i.2xlarge`, `m7a.2xlarge`.
+- **Tools:** bash, `jq`, Python 3.9 or later, and `awscurl` (`python3 -m pip install awscurl`). `scripts/setup_ui.py` and
+  the tests also need `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says
+  `python3`, and use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
   older CLI, create the domain in the console and run every other command as written.
 - **Permissions:** an IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM,
@@ -66,28 +70,72 @@ logger emits twice. See the
   ```bash
   aws bedrock-runtime converse --model-id us.anthropic.claude-haiku-5-5 --messages '[{"role":"user","content":[{"text":"hi"}]}]' --query 'output.message.content[0].text'
   ```
-- **Cost:** about $1.05 an hour while it runs, at November 2026 list prices in us-east-1: two `or2.large.search` nodes
-  at $0.20, one ingestion OCU at $0.24, one `m6i.2xlarge` at $0.384, and about $0.01 of storage. Bedrock calls from
-  the demo's load generator are extra. Run `scripts/cleanup.sh --delete` when you are done.
+- **Cost:** about $1 an hour (about $25 a day) while it runs, at November 2026 list prices in us-east-1: two
+  `or2.large.search` nodes at $0.20, one ingestion OCU at $0.24, one `m6i.2xlarge` at $0.384, and about $0.01 of
+  storage. Any combination from the instance lists costs $1.00 to $1.15 an hour. Bedrock calls from the demo's load
+  generator are extra. Run `scripts/cleanup.sh --delete` when you are done.
 - **Time:** about an hour end to end; the AWS waits are about 15 minutes of it.
 
 ## Deploying with a coding agent
 
 This README is written so a coding agent can run it. If you are an agent: check the prerequisites first, fixing or
-working around anything the README allows. Then send the person this message, filled in, and wait:
+working around anything the README allows, and resolve the instance types, the default VPC subnet and the OpenSearch
+version with the commands in steps 1 and 4. Then send the person this message, filled in, and wait:
 
-> Hi! I'll set up the OpenTelemetry optimized-engine sample. Nothing is created yet.
+> Hi! I'll set up the **Amazon OpenSearch optimized engine sample** from AWS Samples. It shows one engine running analytics and text search together over your OpenTelemetry logs and traces, including traces from an AI agent.
 >
-> - **Account:** `<account id>` in `<region>`, as `<identity>`
-> - **Builds:** an OpenSearch `<version>` domain on the Optimized engine, an ingestion pipeline, and an EC2 instance running the OpenTelemetry Demo with Amazon Bedrock
-> - **Cost:** about $1.05 an hour while it runs, plus Bedrock calls
-> - **Takes:** about an hour. **Undo:** `scripts/cleanup.sh --delete`
+> I've done read-only checks. Nothing is created yet.
 >
-> Which IAM user or role do you sign in to the AWS console with? I'll give it access to OpenSearch UI. Then reply **ok** to start.
+> **Where:** account `<account>`, `<region>`, as `<identity>`
+>
+> **What I'll build:**
+> - An EC2 instance (`<ec2 type>`, 60 GB) running the OpenTelemetry Demo shop. The shop's AI assistant calls Claude Haiku 5.5 and Sonnet 5.5 on Amazon Bedrock. The instance uses the default VPC's public subnet `<subnet>` to pull images and reach Bedrock. Nothing is open inbound.
+> - An OpenSearch Ingestion pipeline that carries the shop's traces and logs to the domain.
+> - An OpenSearch domain on the optimized engine: OpenSearch `<version>`, 2 x `<node type>`, 20 GB gp3 per node.
+> - An OpenSearch UI application to explore the logs, traces, and agent traces.
+>
+> **Cost:** about $25 a day ($1 an hour) in us-east-1, plus Bedrock calls. Please use a test account.
+> **Time:** about an hour.
+> **Cleanup:** everything is tagged `project=<tag>`. Tell me when you're done, or run `scripts/cleanup.sh --delete`.
+>
+> **Before I start:**
+> 1. Which IAM user or role do you sign in to the AWS console with? OpenSearch UI uses that sign-in, so I'll give it access.
+> 2. Do you want a different account or Region? Say so now.
+>
+> **Good to go?** (yes / no)
+>
+> When it's running, I'll send you the OpenSearch UI link and show you where to find agent traces.
 
 Send only this. Add a note only if something blocks you or needs a decision, at most two notes, one short line each.
-Do not explain your reasoning or list what you checked. Do not create anything until the person replies. When Agent
-Traces in OpenSearch UI lists traces from the demo, say so, and list every step where this README was unclear or wrong.
+Do not explain your reasoning or list what you checked. Do not create anything until the person replies.
+
+When step 5 has run, confirm that the shop's AI assistant is sending spans before you say anything is working:
+`source=otel-v2-apm-span-* | where serviceName = 'agent' | stats count()` (POST it to `/_plugins/_ppl` with
+`awscurl --service es`) must return more than zero. If it is still zero 15 minutes after the containers start, say so
+and check the containers on the instance instead. When it is above zero, send this message, filled in:
+
+> Data's flowing: `<n>` services are sending traces and logs, and the shop's AI assistant is answering on Amazon Bedrock. Let's look at it in OpenSearch UI.
+>
+> 1. **Open the UI.** Sign in to the AWS console as `<console identity>`, then open `<UI_ENDPOINT>`. You can also find it under Amazon OpenSearch Service → OpenSearch UI → Applications → `<name>-ui`.
+> 2. **Pick the workspace.** Choose **Astronomy Shop**. I've created it, attached the `<domain>` domain, and given you edit access.
+> 3. **Add two datasets.** In the workspace, open Data → Datasets → Create dataset, choose the `<domain>` data source, and add:
+>
+>    | Index pattern | Time field | Signal type |
+>    |---|---|---|
+>    | `otel-v2-apm-span-*` | `startTime` | Traces |
+>    | `logs-otel-v1-*` | `time` | Logs |
+>
+>    The time field is what lets OpenSearch UI plot each dataset over time, so pick exactly these.
+> 4. **Check the data.** In Discover, choose the traces dataset and run this PPL query: `source=otel-v2-apm-span-* | stats count() by serviceName`. You'll see one row per service.
+> 5. **Explore.**
+>    - **Discover → Traces:** raw spans from every service.
+>    - **Agent Monitoring → Traces:** one row per agent run, with its latency and tokens. Open one to see the model and tool calls.
+>    - **Ask AI** (top right, already on): try "slowest operations in the last hour".
+>    - **More queries:** `queries/blog-queries.ppl` has the PPL from the post.
+>
+> When you're done, say "clean up" and I'll remove everything, or run `scripts/cleanup.sh --delete`.
+
+Then list every step where this README was unclear or wrong.
 
 ## Deployment
 
@@ -106,13 +154,17 @@ TAG="Key=project,Value=$PROJECT_TAG"
 ```
 
 1. **Domain.** In the console: Create domain, Standard create, use case Observability, engine mode Optimized,
-   the newest OpenSearch version offered (3.7 or later), two `or2.large.search` data nodes, 20 GB gp3 per node,
+   the newest OpenSearch version offered (3.7 or later), two data nodes of the first type offered from the list in
+   Prerequisites (`or2.large.search`, then `or1.large.search`), 20 GB gp3 per node,
    fine-grained access control with your IAM identity as master user, and the tag `project=$PROJECT_TAG`. Or from the CLI:
    ```bash
    VERSION=$(aws opensearch list-versions --query "Versions[?starts_with(@, 'OpenSearch_3.')] | [0]" --output text)   # newest first
+   for t in or2.large.search or1.large.search; do   # first OpenSearch Optimized Instance type offered for this version
+     aws opensearch describe-instance-type-limits --instance-type $t --engine-version $VERSION >/dev/null 2>&1 && OS_TYPE=$t && break
+   done; echo "$VERSION on $OS_TYPE"
    aws opensearch create-domain --domain-name $DOMAIN_NAME --engine-version $VERSION \
      --engine-mode OPTIMIZED --use-case OBSERVABILITY \
-     --cluster-config "InstanceType=or2.large.search,InstanceCount=2,ZoneAwarenessEnabled=true,ZoneAwarenessConfig={AvailabilityZoneCount=2}" \
+     --cluster-config "InstanceType=$OS_TYPE,InstanceCount=2,ZoneAwarenessEnabled=true,ZoneAwarenessConfig={AvailabilityZoneCount=2}" \
      --ebs-options "EBSEnabled=true,VolumeType=gp3,VolumeSize=20" \
      --encryption-at-rest-options Enabled=true --node-to-node-encryption-options Enabled=true \
      --domain-endpoint-options EnforceHTTPS=true \
@@ -145,8 +197,8 @@ TAG="Key=project,Value=$PROJECT_TAG"
    ```
    Map the pipeline role into `all_access` **additively**. The file lists your `ADMIN_ARN` in both `backend_roles`
    (matches an IAM role) and `users` (matches an IAM user), so you stay in; a PUT with only the pipeline role locks
-   you out. If you will open OpenSearch UI with another identity, add its role ARN
-   (`arn:aws:iam::<account>:role/<role>`) to `backend_roles` in `rendered/iam/all-access-rolesmapping.json` first.
+   you out. Step 5 adds the identity you sign in to the
+   AWS console with.
    ```bash
    awscurl --service es --region $REGION -X PUT "https://$DOMAIN_ENDPOINT/_plugins/_security/api/rolesmapping/all_access" \
      -H "Content-Type: application/json" -d @rendered/iam/all-access-rolesmapping.json
@@ -160,23 +212,29 @@ TAG="Key=project,Value=$PROJECT_TAG"
    rm -rf overlay && mkdir overlay && cp -r rendered/demo/. overlay/ && cp rendered/collector/otelcol-config-extras.yml overlay/ \
      && tar czf demo-overlay.tgz -C overlay . && aws s3 cp demo-overlay.tgz s3://$CONFIG_BUCKET/
    ```
-   Instance: Amazon Linux 2023, **x86_64** (the compose binary in user data is amd64), any type with 32 GB RAM or
-   more (`m6i.2xlarge` in the command below), root volume 60 GB or more (the demo pulls about 30 images), instance profile `$HOST_ROLE`, IMDSv2
-   with hop limit 2 so containers can use the instance role. It needs outbound internet (a public IP in a default-VPC
+   Instance: Amazon Linux 2023, **x86_64** (the compose binary in user data is amd64), the first type offered from the
+   list in Prerequisites, root volume 60 GB (the demo pulls about 30 images), instance profile `$HOST_ROLE`, IMDSv2 with
+   hop limit 2 so containers can use the instance role. It needs outbound internet (a public IP in a default-VPC
    subnet is enough) and nothing inbound:
    ```bash
-   SG_ID=$(aws ec2 create-security-group --group-name $PIPELINE_NAME-host --description "demo host, no inbound" \
-     --vpc-id $(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text) \
+   VPC=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)
+   read SUBNET AZ < <(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC Name=default-for-az,Values=true \
+     --query 'Subnets[0].[SubnetId,AvailabilityZone]' --output text | tr -d '\r')
+   OFFERED=$(aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=location,Values=$AZ \
+     Name=instance-type,Values=m6i.2xlarge,m6a.2xlarge,m7i.2xlarge,m7a.2xlarge --query 'InstanceTypeOfferings[].InstanceType' --output text)
+   for t in m6i.2xlarge m6a.2xlarge m7i.2xlarge m7a.2xlarge; do echo "$OFFERED" | grep -qw "$t" && EC2_TYPE=$t && break; done
+   echo "$EC2_TYPE in $SUBNET ($AZ)"
+   SG_ID=$(aws ec2 create-security-group --group-name $PIPELINE_NAME-host --description "demo host, no inbound" --vpc-id $VPC \
      --tag-specifications "ResourceType=security-group,Tags=[{$TAG}]" --query GroupId --output text)
-   aws ec2 run-instances --instance-type m6i.2xlarge --count 1 --associate-public-ip-address --security-group-ids $SG_ID \
+   aws ec2 run-instances --instance-type $EC2_TYPE --count 1 --subnet-id $SUBNET --associate-public-ip-address --security-group-ids $SG_ID \
      --image-id $(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query Parameter.Value --output text) \
      --iam-instance-profile Name=$HOST_ROLE --user-data file://rendered/demo/user-data.sh \
      --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=60,VolumeType=gp3,Encrypted=true}' \
      --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2 \
      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$PIPELINE_NAME},{$TAG}]" "ResourceType=volume,Tags=[{$TAG}]"
    ```
-   If `run-instances` returns `InsufficientInstanceCapacity`, retry in another Availability Zone (add `--subnet-id`) or
-   with another 32 GB type such as `m6a.2xlarge` or `m7i.2xlarge`. Progress is written to
+   If `run-instances` returns `InsufficientInstanceCapacity`, use the next type in the list, or another default subnet
+   (`Subnets[1]` in the `describe-subnets` query). Progress is written to
    `/var/log/otel-demo-userdata.log` on the instance. The SSM agent registers about two minutes after launch; then:
    ```bash
    aws ssm send-command --instance-ids <id> --document-name AWS-RunShellScript --parameters 'commands=["tail -n 30 /var/log/otel-demo-userdata.log"]'
@@ -187,24 +245,25 @@ TAG="Key=project,Value=$PROJECT_TAG"
    ```bash
    scripts/check-ingestion.sh $DOMAIN_ENDPOINT $REGION $PIPELINE_NAME $DLQ_BUCKET
    ```
-5. **OpenSearch UI.** In the console, OpenSearch UI (Dashboards): create an application, attach the domain as a data
-   source, and add yourself as admin (for a console session that is the assumed-role session ARN, not the role ARN).
-   Open it, create an Observability workspace on that data source, and in the workspace create a **traces dataset**:
-   index pattern `otel-v2-apm-span-*`, time field `startTime`, signal type Traces. Then open Agent Monitoring > Traces.
-   Without the dataset the page shows "Start tracing your AI agents"; its built-in default is `otel-v1-apm-span-*`,
-   which does not exist here. From the CLI, the application is:
+5. **OpenSearch UI.** One script adds the identity you sign in to the AWS console with to the domain's `all_access`
+   mapping, creates the OpenSearch UI application with that identity as admin, turns on Ask AI, and creates an
+   Observability workspace named **Astronomy Shop** with the domain attached:
    ```bash
-   aws opensearch create-application --name $DOMAIN_NAME-ui \
-     --data-sources dataSourceArn=arn:aws:es:$REGION:$ACCOUNT_ID:domain/$DOMAIN_NAME \
-     --app-configs key=opensearchDashboards.dashboardAdmin.users,value=$ADMIN_ARN \
-     --tag-list $TAG
+   $PY scripts/setup_ui.py --admins <console identity>
    ```
-   The application endpoint accepts SigV4 for service name `opensearch` (`awscurl --service opensearch`), so the
-   workspace (`POST /api/workspaces`, feature `use-case-observability`) and the dataset
-   (`POST /w/<workspace>/api/saved_objects/index-pattern` with `signalType: "traces"`) can be created from a shell.
-   You open OpenSearch UI signed in to the AWS console. That identity needs access, so if it is not the one that ran
-   the commands above, add it as an admin of the application and to the `all_access` mapping.
-   Agent Traces lists a trace when its root span satisfies `parentSpanId = "" AND isnotnull(attributes.gen_ai.operation.name)`.
+   `<console identity>` is the ARN you sign in to the console with: the user ARN for an IAM user, the session ARN
+   (`arn:aws:sts::<account>:assumed-role/<role>/<session>`) for a role. It prints `UI_ENDPOINT`. Open that URL signed
+   in to the console, choose the workspace, and create two datasets under Data → Datasets (the UI fills in their
+   field lists, the API does not):
+
+   | Index pattern | Time field | Signal type |
+   |---|---|---|
+   | `otel-v2-apm-span-*` | `startTime` | Traces |
+   | `logs-otel-v1-*` | `time` | Logs |
+
+   Then open Agent Monitoring → Traces. It lists a trace when its root span satisfies
+   `parentSpanId = "" AND isnotnull(attributes.gen_ai.operation.name)`; without a Traces dataset on
+   `otel-v2-apm-span-*` the page shows "Start tracing your AI agents".
 
 ## Operating notes
 

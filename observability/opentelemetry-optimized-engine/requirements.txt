@@ -1,3 +1,4 @@
-# for the offline tests only; the scripts use the standard library
+# scripts/setup_ui.py needs boto3; the tests need pytest and PyYAML. The other scripts use the standard library.
+boto3>=1.44.0
 pytest>=8.0
 PyYAML>=6.0
