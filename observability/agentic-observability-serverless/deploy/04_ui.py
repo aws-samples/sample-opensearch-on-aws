@@ -3,6 +3,8 @@
 Creates (idempotent):
   OpenSearch UI application  <name>-ui   data source = the <name>-ts collection, dashboard admins from --admins,
                                          tagged project=agentic-observability-serverless
+  Also enables the Ask AI / Agentic Chat features on the application (free; off by default on a new app; skipped with
+  a note if the region does not offer them).
 
 Usage:
   python deploy/04_ui.py --name agentobs --region us-east-1 --profile default --admins arn:aws:sts::<account-id>:assumed-role/<Role>/<session>,arn:aws:iam::<account-id>:user/<you>
@@ -16,6 +18,7 @@ import sys
 import time
 
 import boto3
+from botocore.exceptions import ClientError
 
 TAG_PROJECT = "agentic-observability-serverless"
 
@@ -28,6 +31,25 @@ def list_apps(osc):
         token = r.get("nextToken")
         if not token:
             return apps
+
+
+def enable_ask_ai(osc, app_id):
+    """Turn on the Ask AI / Agentic Chat features (free; not on by default for a new app). Best effort."""
+    try:
+        status = osc.get_capability(applicationId=app_id, capabilityName="ai-capability").get("status")
+        if status in ("active", "creating", "updating"):
+            print(f"Ask AI: {status}")
+            return
+    except ClientError:
+        pass  # not registered yet
+    try:
+        r = osc.register_capability(applicationId=app_id, capabilityName="ai-capability", capabilityConfig={"aiConfig": {}})
+        print(f"Ask AI: {r.get('status')} (ready in a couple of minutes)")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        # e.g. DisabledOperationException where the agentic AI features are not offered in this region
+        print(f"Ask AI: not enabled ({code}); enable it later in the console (application details -> AI features) "
+              f"if your region supports it")
 
 
 def main():
@@ -65,6 +87,7 @@ def main():
         d = osc.get_application(id=app["id"])
         if d.get("status") == "ACTIVE" and d.get("endpoint"):
             print(f"\nUI application {app_name}: ACTIVE")
+            enable_ask_ai(osc, app["id"])
             print(f"UI_ENDPOINT=https://{d['endpoint'].removeprefix('https://')}")
             print("Open it while signed in to the AWS console as one of the admins, then follow deploy/04_ui.md "
                   "(workspace, datasets).")
