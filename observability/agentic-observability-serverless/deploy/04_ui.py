@@ -1,8 +1,9 @@
 """Step 4: OpenSearch UI application, Ask AI, and an empty observability workspace. Datasets stay a console step (04_ui.md).
 
 Creates (idempotent):
-  OpenSearch UI application  <name>-ui   data source = the <name>-ts collection, dashboard admins from --admins,
-                                         tagged project=agentic-observability-serverless
+  OpenSearch UI application  <name>-ui   data source = the <name>-ts collection, dashboard admins = --admins plus the
+                                         deploying identity (so this script can create the workspace), tagged
+                                         project=agentic-observability-serverless
   Ask AI / Agentic Chat enabled on the application (free; off by default on a new app; skipped with a note where the
                                          region does not offer it)
   Workspace                  "<--workspace>"  Observability use case, the collection attached, write access granted to
@@ -58,6 +59,20 @@ def enable_ask_ai(osc, app_id):
         # e.g. DisabledOperationException where the agentic AI features are not offered in this region
         print(f"Ask AI: not enabled ({code}); enable it later in the console (application details -> AI features) "
               f"if your region supports it")
+
+
+ADMIN_KEY = "opensearchDashboards.dashboardAdmin.users"
+
+
+def ensure_app_admins(osc, app_id, detail, wanted):
+    """The identity running this script must be an app admin, or it cannot see the data source to build the
+    workspace. Merge `wanted` into the app's admin list (self-heals a re-run of an app created without it)."""
+    cfg = {c["key"]: c["value"] for c in detail.get("appConfigs", [])}
+    current = json.loads(cfg.get(ADMIN_KEY, "[]"))
+    merged = list(dict.fromkeys(current + wanted))
+    if set(merged) != set(current):
+        osc.update_application(id=app_id, appConfigs=[{"key": ADMIN_KEY, "value": json.dumps(merged)}])
+        print(f"UI application: admins now {', '.join(merged)}")
 
 
 def ui_call(session, region, host, method, path, body=None, timeout=60):
@@ -127,6 +142,8 @@ def main():
     s = boto3.Session(profile_name=a.profile, region_name=a.region)
     caller = s.client("sts").get_caller_identity()["Arn"]
     admins = list(dict.fromkeys(x.strip() for x in (a.admins or caller).split(",") if x.strip()))
+    # the deploying identity must be an app admin too, or it cannot see the data source to create the workspace
+    app_admins = list(dict.fromkeys([*admins, caller]))
     aoss, osc = s.client("opensearchserverless"), s.client("opensearch")
     app_name, col = f"{a.name}-ui", f"{a.name}-ts"
 
@@ -143,9 +160,9 @@ def main():
         app = osc.create_application(
             name=app_name,
             dataSources=[{"dataSourceArn": col_arn, "dataSourceDescription": "agentic observability sample"}],
-            appConfigs=[{"key": "opensearchDashboards.dashboardAdmin.users", "value": json.dumps(admins)}],
+            appConfigs=[{"key": ADMIN_KEY, "value": json.dumps(app_admins)}],
             tagList=[{"Key": "project", "Value": TAG_PROJECT}])
-        print(f"UI application {app_name}: create requested ({app['id']}), admins: {', '.join(admins)}")
+        print(f"UI application {app_name}: create requested ({app['id']}), admins: {', '.join(app_admins)}")
 
     for _ in range(90):  # up to 15 min
         d = osc.get_application(id=app["id"])
@@ -153,7 +170,8 @@ def main():
             host = d["endpoint"].removeprefix("https://")
             print(f"\nUI application {app_name}: ACTIVE")
             enable_ask_ai(osc, app["id"])
-            create_workspace(s, a.region, host, a.workspace, admins + [caller])
+            ensure_app_admins(osc, app["id"], d, app_admins)
+            create_workspace(s, a.region, host, a.workspace, app_admins)
             print(f"UI_ENDPOINT=https://{host}")
             print(f"Open it signed in to the AWS console as one of the admins, choose the \"{a.workspace}\" workspace, "
                   f"then create the datasets as in deploy/04_ui.md.")
