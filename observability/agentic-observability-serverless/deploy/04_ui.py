@@ -1,10 +1,13 @@
-"""Step 4: OpenSearch UI application connected to the collection. The workspace and datasets stay console steps (04_ui.md).
+"""Step 4: OpenSearch UI application, Ask AI, and an empty observability workspace. Datasets stay a console step (04_ui.md).
 
 Creates (idempotent):
   OpenSearch UI application  <name>-ui   data source = the <name>-ts collection, dashboard admins from --admins,
                                          tagged project=agentic-observability-serverless
-  Also enables the Ask AI / Agentic Chat features on the application (free; off by default on a new app; skipped with
-  a note if the region does not offer them).
+  Ask AI / Agentic Chat enabled on the application (free; off by default on a new app; skipped with a note where the
+                                         region does not offer it)
+  Workspace                  "<--workspace>"  Observability use case, the collection attached, write access granted to
+                                         --admins so you can edit it in the console. You create the datasets there
+                                         (the UI fills in their field lists; a script cannot).
 
 Usage:
   python deploy/04_ui.py --name agentobs --region us-east-1 --profile default --admins arn:aws:sts::<account-id>:assumed-role/<Role>/<session>,arn:aws:iam::<account-id>:user/<you>
@@ -13,11 +16,16 @@ session ARN (arn:aws:sts::...:assumed-role/...) for a role. Default: the identit
 Prints the application endpoint when ACTIVE (usually a few minutes).
 """
 import argparse
+import hashlib
 import json
 import sys
 import time
+import urllib.error
+import urllib.request
 
 import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 from botocore.exceptions import ClientError
 
 TAG_PROJECT = "agentic-observability-serverless"
@@ -52,12 +60,68 @@ def enable_ask_ai(osc, app_id):
               f"if your region supports it")
 
 
+def ui_call(session, region, host, method, path, body=None, timeout=60):
+    """Signed call to the OpenSearch UI application's Dashboards API (service 'opensearch')."""
+    url = f"https://{host}{path}"
+    data = json.dumps(body).encode() if body is not None else b""
+    headers = {"osd-xsrf": "true", "x-amz-content-sha256": hashlib.sha256(data).hexdigest()}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = AWSRequest(method=method, url=url, data=data if body is not None else None, headers=headers)
+    SigV4Auth(session.get_credentials(), "opensearch", region).add_auth(req)
+    r = urllib.request.Request(url, data=data if body is not None else None, headers=dict(req.headers), method=method)
+    try:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:  # noqa: BLE001 - best effort; the console fallback covers failures
+        return None, f"{type(e).__name__}: {e}"
+
+
+def create_workspace(session, region, host, ws_name, principals):
+    """Create an empty Observability workspace with the collection attached, editable by the console admins.
+    Datasets are left to the user (the UI populates their field lists; the API does not)."""
+    # the collection's data-source saved object appears once the app is active; wait briefly for it
+    ds_id = None
+    for _ in range(8):
+        st, body = ui_call(session, region, host, "GET", "/api/saved_objects/_find?type=data-source&per_page=50")
+        srcs = json.loads(body).get("saved_objects", []) if st == 200 else []
+        if srcs:
+            ds_id = srcs[0]["id"]
+            break
+        time.sleep(15)
+    if not ds_id:
+        print("Workspace: data source not ready yet; create the workspace in the console (deploy/04_ui.md)")
+        return
+
+    st, body = ui_call(session, region, host, "POST", "/api/workspaces/_list", {"perPage": 100})
+    existing = next((w for w in (json.loads(body).get("result", {}).get("workspaces", []) if st == 200 else [])
+                     if w.get("name") == ws_name), None)
+    if existing:
+        print(f"Workspace: \"{ws_name}\" exists ({existing['id']})")
+        return
+
+    users = list(dict.fromkeys(principals))
+    perms = {k: {"users": users} for k in ("read", "write", "library_read", "library_write")}
+    st, body = ui_call(session, region, host, "POST", "/api/workspaces", {
+        "attributes": {"name": ws_name, "description": "agentic observability sample",
+                       "features": ["use-case-observability"], "color": "#54B399"},
+        "settings": {"dataSources": [ds_id], "permissions": perms}})
+    ok = st == 200 and json.loads(body).get("success")
+    if ok:
+        print(f"Workspace: created \"{ws_name}\" ({json.loads(body)['result']['id']}), editable by {', '.join(users)}")
+    else:
+        print(f"Workspace: not created ({st}); create it in the console (deploy/04_ui.md). {body[:160]}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="agentobs")
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--profile", default=None)
     ap.add_argument("--admins", default=None, help="comma-separated ARNs as signed in to the console (session ARN for a role)")
+    ap.add_argument("--workspace", default="Astronomy Shop", help="name of the observability workspace to create")
     a = ap.parse_args()
 
     s = boto3.Session(profile_name=a.profile, region_name=a.region)
@@ -86,11 +150,13 @@ def main():
     for _ in range(90):  # up to 15 min
         d = osc.get_application(id=app["id"])
         if d.get("status") == "ACTIVE" and d.get("endpoint"):
+            host = d["endpoint"].removeprefix("https://")
             print(f"\nUI application {app_name}: ACTIVE")
             enable_ask_ai(osc, app["id"])
-            print(f"UI_ENDPOINT=https://{d['endpoint'].removeprefix('https://')}")
-            print("Open it while signed in to the AWS console as one of the admins, then follow deploy/04_ui.md "
-                  "(workspace, datasets).")
+            create_workspace(s, a.region, host, a.workspace, admins + [caller])
+            print(f"UI_ENDPOINT=https://{host}")
+            print(f"Open it signed in to the AWS console as one of the admins, choose the \"{a.workspace}\" workspace, "
+                  f"then create the datasets as in deploy/04_ui.md.")
             return 0
         if d.get("status") == "FAILED":
             print(f"UI application {app_name}: FAILED")

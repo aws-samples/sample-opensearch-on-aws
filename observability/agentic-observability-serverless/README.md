@@ -96,8 +96,8 @@ your AWS CLI's default region. Each script is idempotent and prints the identifi
    (live models on Bedrock, weighted model mix, realistic shopper questions), points the Collector at the pipeline
    and starts the stack with the demo's own `make start-agentic`. `demo-app/README.md` describes the additions. If RunInstances reports InsufficientInstanceCapacity, re-run with a public subnet in another Availability Zone or another 8 vCPU / 32 GiB type via --instance-type (for example r7a.2xlarge); the role and security group are reused.
 4. **OpenSearch UI** (`deploy/04_ui.py`, then the console steps in `deploy/04_ui.md`, ~15 min): the script creates
-   the application and prints its endpoint; the console steps add the workspace, datasets, and a query to confirm
-   data is arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
+   the application, enables Ask AI, and creates the workspace with the collection attached; you then create the
+   datasets in the UI (it builds their field lists) and confirm data is arriving. Then build dashboards 1 and 2 from `dashboards/dashboard-1-health.md` and `dashboard-2-ai-cost.md`.
 5. **Online evaluation** (`evaluation/README.md`): run `score_live.py` once from your workstation with a small
    `--limit` to check scoring works, then build dashboard 3 from `dashboards/dashboard-3-ai-quality.md`. Each scored
    conversation costs about 1 cent in Bedrock calls; do not leave `--loop` running on a laptop (see
