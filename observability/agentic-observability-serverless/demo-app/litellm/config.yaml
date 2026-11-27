@@ -1,0 +1,34 @@
+# LiteLLM proxy: OpenAI-compatible endpoint for the OTel Demo agent, backed by Amazon Bedrock (Converse API).
+# The agent picks ONE of the direct aliases per conversation (see patches/agent/llm.py), so the model name recorded
+# on the span (gen_ai.response.model) is the real one. The weighted "shop-agent" alias is kept for reference: LiteLLM
+# returns the requested alias in the response `model` field, so with it every span would say "shop-agent".
+model_list:
+  - model_name: claude-haiku-5-5
+    litellm_params:
+      model: bedrock/converse/us.anthropic.claude-haiku-5-5
+      aws_region_name: us-east-1
+  - model_name: claude-sonnet-5-5
+    litellm_params:
+      model: bedrock/converse/us.anthropic.claude-sonnet-5-5
+      aws_region_name: us-east-1
+  # optional weighted alias (not used by the patched agent)
+  - model_name: shop-agent
+    litellm_params:
+      model: bedrock/converse/us.anthropic.claude-haiku-5-5
+      aws_region_name: us-east-1
+      weight: 7
+  - model_name: shop-agent
+    litellm_params:
+      model: bedrock/converse/us.anthropic.claude-sonnet-5-5
+      aws_region_name: us-east-1
+      weight: 3
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  allowed_fails: 3
+litellm_settings:
+  drop_params: true        # drop OpenAI-only params Bedrock does not accept
+  modify_params: true      # let LiteLLM fix Bedrock message quirks (empty assistant text next to tool calls)
+  request_timeout: 60
+general_settings:
+  disable_spend_logs: true

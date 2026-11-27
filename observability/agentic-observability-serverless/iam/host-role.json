@@ -1,0 +1,23 @@
+{
+  "_comment": "Instance role for the EC2 host running the OTel Demo. Trust policy principal: ec2.amazonaws.com. Also attach the managed policy AmazonSSMManagedInstanceCore (Session Manager access). Bedrock for the agent (via LiteLLM) and, if the evaluation job runs on the host, for the evaluation model. osis:Ingest lets the Collector sign OTLP requests to the pipeline. Add the role to the collection's data access policy only if the evaluation job runs here.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockModels",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:<region>:<account-id>:inference-profile/<model-prefix>.anthropic.claude-haiku-5-5",
+        "arn:aws:bedrock:<region>:<account-id>:inference-profile/<model-prefix>.anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*"
+      ]
+    },
+    {
+      "Sid": "IngestToPipeline",
+      "Effect": "Allow",
+      "Action": ["osis:Ingest"],
+      "Resource": "arn:aws:osis:<region>:<account-id>:pipeline/<pipeline-name>"
+    }
+  ]
+}

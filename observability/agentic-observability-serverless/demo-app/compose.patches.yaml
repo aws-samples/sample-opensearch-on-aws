@@ -1,0 +1,14 @@
+# Bind-mounts the two small patches over the stock OTel Demo images (no image rebuild).
+#   patches/agent/llm.py             weighted model selection per conversation (LLM_MODEL_WEIGHTS)
+#   patches/loadgen/locustfile.py    realistic shopper questions tagged with a use case
+#   patches/loadgen/agent_prompts.py the question set
+services:
+  agent:
+    environment:
+      - LLM_MODEL_WEIGHTS=${LLM_MODEL_WEIGHTS}
+    volumes:
+      - ./patches/agent/llm.py:/app/src/agents/llm.py:ro
+  load-generator:
+    volumes:
+      - ./patches/loadgen/locustfile.py:/usr/src/app/locustfile.py:ro
+      - ./patches/loadgen/agent_prompts.py:/usr/src/app/agent_prompts.py:ro

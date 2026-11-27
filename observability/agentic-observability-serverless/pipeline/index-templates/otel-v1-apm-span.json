@@ -1,0 +1,81 @@
+{
+  "index_patterns": ["otel-v1-apm-span-*"],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "index.data.retention": "30",
+      "index.warm.after": "7d"
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "gen_ai_strings": {
+            "path_match": "gen_ai.*",
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 4096 }
+          }
+        },
+        {
+          "attr_strings": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 4096 }
+          }
+        }
+      ],
+      "properties": {
+        "attributes": {
+          "properties": {
+            "http": { "type": "object" }, "net": { "type": "object" }, "network": { "type": "object" },
+            "rpc": { "type": "object" }, "db": { "type": "object" }, "server": { "type": "object" },
+            "client": { "type": "object" }, "url": { "type": "object" }, "messaging": { "type": "object" },
+            "peer": { "type": "object" }, "user": { "type": "object" }, "user_agent": { "type": "object" },
+            "session": { "type": "object" }, "error": { "type": "object" }, "code": { "type": "object" },
+            "thread": { "type": "object" }, "feature_flag": { "type": "object" }, "grpc": { "type": "object" },
+            "kafka": { "type": "object" }, "exception": { "type": "object" }, "gen_ai": { "type": "object" },
+            "traceloop": { "type": "object" }, "app": { "type": "object" }, "demo": { "type": "object" }
+          }
+        },
+        "resource": { "properties": { "attributes": { "type": "flat_object" } } },
+        "events": { "type": "flat_object" },
+        "links": { "type": "flat_object" },
+        "@timestamp": { "type": "date_nanos" },
+        "traceId": { "type": "keyword" },
+        "spanId": { "type": "keyword" },
+        "parentSpanId": { "type": "keyword" },
+        "name": { "type": "keyword", "ignore_above": 1024 },
+        "kind": { "type": "keyword" },
+        "serviceName": { "type": "keyword" },
+        "traceGroup": { "type": "keyword", "ignore_above": 1024 },
+        "startTime": { "type": "date_nanos" },
+        "endTime": { "type": "date_nanos" },
+        "durationInNanos": { "type": "long" },
+        "status": { "properties": { "code": { "type": "integer" }, "message": { "type": "text" } } },
+        "traceGroupFields": {
+          "properties": {
+            "endTime": { "type": "date_nanos" }, "durationInNanos": { "type": "long" }, "statusCode": { "type": "integer" }
+          }
+        },
+        "gen_ai": {
+          "properties": {
+            "operation": { "properties": { "name": { "type": "keyword" } } },
+            "agent": { "properties": { "name": { "type": "keyword" } } },
+            "request": { "properties": { "model": { "type": "keyword" } } },
+            "response": { "properties": { "model": { "type": "keyword" }, "finish_reasons": { "type": "keyword" } } },
+            "provider": { "properties": { "name": { "type": "keyword" } } },
+            "tool": {
+              "properties": {
+                "name": { "type": "keyword" },
+                "call": { "properties": { "arguments": { "type": "text" }, "result": { "type": "text" } } }
+              }
+            },
+            "conversation": { "properties": { "id": { "type": "keyword" } } },
+            "usage": { "properties": { "input_tokens": { "type": "long" }, "output_tokens": { "type": "long" } } },
+            "input": { "properties": { "messages": { "type": "text" } } },
+            "output": { "properties": { "messages": { "type": "text" } } }
+          }
+        }
+      }
+    }
+  }
+}

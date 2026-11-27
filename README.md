@@ -17,6 +17,7 @@ This repository provides sample code and reference architectures for building pr
 | [ingestion](ingestion/) | Load and reload data into Amazon OpenSearch Service using OpenSearch Ingestion (OSI) pipelines. Includes a full AWS CDK stack with VPC, OpenSearch domain, OSI pipeline, S3 buckets, and SSM-accessible jumphost. |
 | [tools/index-compare](tools/index-compare/) | Compare two OpenSearch indices and identify document IDs present in the source but missing from the target. Supports Amazon OpenSearch Service managed domains and Serverless collections via SigV4, plus HTTP basic auth, with an optional local Docker Compose setup for testing. |
 | [operations/cloudwatch-alarms](operations/cloudwatch-alarms/) | Deploy AWS-recommended CloudWatch alarms for an Amazon OpenSearch Service domain in minutes. Includes a CloudFormation template (23 alarms + SNS topic) and an interactive deployment script that auto-detects your domain configuration. |
+| [observability/agentic-observability-serverless](observability/agentic-observability-serverless/) | End-to-end sample for observing and evaluating an AI shopping assistant with Amazon OpenSearch Serverless: OpenTelemetry Demo traces and logs through OpenSearch Ingestion into a time series collection, OpenSearch UI dashboards for business health, AI cost and AI quality, and an online evaluation job that scores each conversation against what the assistant's tools returned. Includes deployment and cleanup scripts. |
 
 _More samples coming soon — vector search patterns, search relevance tuning, and operational tooling._
 
@@ -47,6 +48,11 @@ sample-opensearch-on-aws/
 │       ├── README.md
 │       ├── OpenSearch_cloudwatch_alarms.yaml
 │       └── deploy.sh
+├── observability/
+│   └── agentic-observability-serverless/   # AI agent traces, cost and online evaluation on Serverless
+│       ├── README.md
+│       ├── THREAT_MODEL.md
+│       └── ...
 └── tools/
     └── index-compare/        # Index comparison tool
         ├── README.md

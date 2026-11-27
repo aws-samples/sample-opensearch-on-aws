@@ -1,0 +1,2 @@
+boto3>=1.44.0
+opensearch-py>=2.6
