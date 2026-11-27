@@ -6,7 +6,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cfg_path = os.path.join(ROOT, "config.env")
 if not os.path.exists(cfg_path):
     sys.exit("config.env not found; copy config.env.example to config.env and fill it in")
-cfg = dict(l.strip().split("=", 1) for l in open(cfg_path, encoding="utf-8") if "=" in l and not l.lstrip().startswith("#"))
+cfg = {}
+for line in open(cfg_path, encoding="utf-8"):
+    line = line.split("#", 1)[0].strip()   # drop comments, including a trailing "KEY=value   # note"
+    if "=" in line:
+        k, v = line.split("=", 1); cfg[k.strip()] = v.strip()
 out = os.path.join(ROOT, "rendered"); shutil.rmtree(out, ignore_errors=True)
 missing = set()
 for top in ("templates", "pipeline", "iam", "collector", "demo"):

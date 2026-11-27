@@ -1,7 +1,8 @@
 """OpenSearch UI for this sample, in one step (idempotent):
   1. adds your console identity to the domain's all_access mapping (merged with what is there)
-  2. creates the OpenSearch UI application <DOMAIN_NAME>-ui on the domain, with your console identity as admin,
-     tagged project=<PROJECT_TAG>; if it exists, adds missing admins
+  2. creates the OpenSearch UI application <DOMAIN_NAME>-ui on the domain, with your console identity and the identity
+     running this script as admins, tagged project=<PROJECT_TAG>; if it exists, adds missing admins. The script's own
+     identity must be an admin: without it, the application hides the data source and step 4 cannot attach it.
   3. enables Ask AI on the application (free; skipped with a note where the Region does not offer it)
   4. creates an Observability workspace with the domain attached and edit access for the admins
 Datasets stay a console step: the UI fills in their field lists, the API does not.
@@ -64,6 +65,10 @@ def map_all_access(session, region, endpoint, admins):
     st, body = signed(session, region, "es", "PUT", url, new)
     print(f"all_access: added {', '.join(added)}" if st == 200 else f"all_access: update failed ({st}) {body[:160]}")
 
+def app_admins(admins, caller):
+    """Application admins: the console identities plus the identity running this script (needed to see the data source)."""
+    return list(dict.fromkeys(admins + [caller]))
+
 def list_apps(osc):
     apps, token = [], None
     while True:
@@ -121,6 +126,7 @@ def main():
     d = osc.describe_domain(DomainName=cfg["DOMAIN_NAME"])["DomainStatus"]
     if not d.get("Endpoint"): sys.exit(f"domain {cfg['DOMAIN_NAME']} has no endpoint yet; wait until it is active")
     map_all_access(s, region, d["Endpoint"], admins)
+    ui_admins = app_admins(admins, caller)
     app_name = f"{cfg['DOMAIN_NAME']}-ui"
     app = next((x for x in list_apps(osc) if x.get("name") == app_name), None)
     if app:
@@ -128,7 +134,7 @@ def main():
         conf = {c["key"]: c["value"] for c in cur.get("appConfigs", [])}
         try: have = json.loads(conf.get("opensearchDashboards.dashboardAdmin.users", "[]"))
         except ValueError: have = [x.strip() for x in conf.get("opensearchDashboards.dashboardAdmin.users", "").split(",") if x.strip()]
-        want = list(dict.fromkeys(have + admins))
+        want = list(dict.fromkeys(have + ui_admins))
         if conf.get("opensearchDashboards.dashboardAdmin.users") != json.dumps(want):   # also normalises a comma string to a JSON list
             osc.update_application(id=app["id"], appConfigs=[{"key": "opensearchDashboards.dashboardAdmin.users", "value": json.dumps(want)}])
             print(f"UI application {app_name}: exists ({app['id']}), admins now {', '.join(want)}")
@@ -137,15 +143,15 @@ def main():
     else:
         app = osc.create_application(
             name=app_name, dataSources=[{"dataSourceArn": d["ARN"]}],
-            appConfigs=[{"key": "opensearchDashboards.dashboardAdmin.users", "value": json.dumps(admins)}],
+            appConfigs=[{"key": "opensearchDashboards.dashboardAdmin.users", "value": json.dumps(ui_admins)}],
             tagList=[{"Key": "project", "Value": cfg["PROJECT_TAG"]}])
-        print(f"UI application {app_name}: create requested ({app['id']}), admins: {', '.join(admins)}")
+        print(f"UI application {app_name}: create requested ({app['id']}), admins: {', '.join(ui_admins)}")
     for _ in range(90):
         g = osc.get_application(id=app["id"])
         if g.get("status") == "ACTIVE" and g.get("endpoint"):
             host = g["endpoint"].removeprefix("https://")
             enable_ask_ai(osc, app["id"])
-            create_workspace(s, region, host, a.workspace, admins + [caller])
+            create_workspace(s, region, host, a.workspace, ui_admins)
             print(f"UI_ENDPOINT=https://{host}")
             return 0
         if g.get("status") == "FAILED": print(f"UI application {app_name}: FAILED"); return 1

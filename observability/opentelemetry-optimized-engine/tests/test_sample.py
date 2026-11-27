@@ -20,7 +20,7 @@ def make_env(tmp, **overrides):
     cfg = {"REGION": "us-east-1", "ACCOUNT_ID": "111122223333", "DOMAIN_NAME": "d", "DOMAIN_ENDPOINT": "search-d.us-east-1.es.amazonaws.com",
            "PIPELINE_NAME": "p", "INGEST_ENDPOINT": "p.us-east-1.osis.amazonaws.com", "PIPELINE_ROLE": "pr", "HOST_ROLE": "hr",
            "DLQ_BUCKET": "dlq", "CONFIG_BUCKET": "cfg", "ADMIN_ARN": "arn:aws:iam::111122223333:role/Admin", "LLM_API_KEY": "sk-x",
-           "GP_DOMAIN_ENDPOINT": "search-g.us-east-1.es.amazonaws.com", "PROJECT_TAG": "t"}
+           "GP_DOMAIN_ENDPOINT": "search-g.us-east-1.es.amazonaws.com", "PROJECT_TAG": "t", "MODEL_PREFIX": "us"}
     cfg.update(overrides)
     for src in ("templates", "pipeline", "iam", "collector", "demo", "scripts"):
         shutil.copytree(os.path.join(ROOT, src), os.path.join(tmp, src))
@@ -56,6 +56,28 @@ def test_render_accepts_blank_endpoint_before_it_is_known():
         make_env(tmp, INGEST_ENDPOINT="")
         r = run_render(tmp)
         assert r.returncode == 0, r.stdout + r.stderr
+def test_render_drops_trailing_comments_from_values():
+    with tempfile.TemporaryDirectory() as tmp:
+        make_env(tmp, INGEST_ENDPOINT="   # leave blank; filled after step 3", DLQ_BUCKET="dlq-x   # a note")
+        r = run_render(tmp)
+        assert r.returncode == 0, r.stdout + r.stderr
+        col = open(os.path.join(tmp, "rendered", "collector", "otelcol-config-extras.yml"), encoding="utf-8").read()
+        assert "leave blank" not in col and "https:///p/v1/traces" in col
+        pipe = open(os.path.join(tmp, "rendered", "pipeline", "pipeline.yaml"), encoding="utf-8").read()
+        assert '"dlq-x"' in pipe and "a note" not in pipe
+def test_config_example_keeps_comments_on_their_own_lines():
+    for line in read("config.env.example").splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            assert "#" not in line, f"trailing comment: {line}"
+def test_model_prefix_sets_the_bedrock_profiles():
+    assert "us.anthropic." not in read("demo/litellm/config.yaml") and "us.anthropic." not in read("iam/host-role-policy.json")
+    with tempfile.TemporaryDirectory() as tmp:
+        make_env(tmp, REGION="ap-southeast-2", MODEL_PREFIX="au")
+        assert run_render(tmp).returncode == 0
+        lit = open(os.path.join(tmp, "rendered", "demo", "litellm", "config.yaml"), encoding="utf-8").read()
+        pol = open(os.path.join(tmp, "rendered", "iam", "host-role-policy.json"), encoding="utf-8").read()
+        assert lit.count("bedrock/converse/au.anthropic.") == 4 and "us.anthropic." not in lit
+        assert "inference-profile/au.anthropic.claude-haiku-5-5" in pol and "inference-profile/au.anthropic.claude-sonnet-5-5" in pol
 
 # ---- templates ---------------------------------------------------------------------------------------------------------
 def leaf(props, dotted):
@@ -222,6 +244,24 @@ def test_console_identity_goes_to_the_right_all_access_list():
     assert m.mapping_entry("arn:aws:sts::111122223333:assumed-role/Admin/jane-session") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
     assert m.mapping_entry("arn:aws:iam::111122223333:role/Admin") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
     assert m.mapping_entry("arn:aws:iam::111122223333:user/jane") == ("users", "arn:aws:iam::111122223333:user/jane")
+
+def test_ui_admins_always_include_the_identity_running_the_script():
+    m = load_setup_ui()
+    console, cli = "arn:aws:sts::111122223333:assumed-role/Admin/jane", "arn:aws:iam::111122223333:user/ci"
+    assert m.app_admins([console], cli) == [console, cli]
+    assert m.app_admins([cli], cli) == [cli]
+    src = read("scripts/setup_ui.py")
+    assert "json.dumps(ui_admins)" in src and "have + ui_admins" in src and "a.workspace, ui_admins" in src
+
+def test_readme_checks_names_before_creating_and_strips_carriage_returns():
+    r = read("README.md")
+    for s in ("exists: bucket $DLQ_BUCKET", "exists: role $PIPELINE_ROLE", "exists: domain $DOMAIN_NAME", "exists: pipeline $PIPELINE_NAME"):
+        assert s in r
+    assert r.index("exists: bucket") < r.index("1. **Domain.**")
+    for line in r.splitlines():
+        if re.search(r"=\$\(aws ", line) and "--output text" in line:
+            assert "tr -d '\\r'" in line, f"captured CLI value without tr -d: {line.strip()[:80]}"
+    assert "--messages file://msg.json" in r and "--messages '[" not in r
 
 def test_readme_uses_setup_ui_and_picked_instance_types():
     r = read("README.md")

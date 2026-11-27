@@ -18,8 +18,8 @@
       "Resource": [
         "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-*",
         "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-*",
-        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/us.anthropic.claude-haiku-5-5",
-        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/us.anthropic.claude-sonnet-5-5"
+        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/{{MODEL_PREFIX}}.anthropic.claude-haiku-5-5",
+        "arn:aws:bedrock:{{REGION}}:{{ACCOUNT_ID}}:inference-profile/{{MODEL_PREFIX}}.anthropic.claude-sonnet-5-5"
       ]
     },
     {

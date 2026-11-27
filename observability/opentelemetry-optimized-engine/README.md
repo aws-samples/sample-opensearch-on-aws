@@ -52,8 +52,9 @@ logger emits twice. See the
   in your Region. It has a current AWS CLI, bash, Python 3, pip, jq and git; add `pip3 install --user awscurl`.
   Any Linux or macOS shell works too, and so does Git Bash on Windows.
 - **Region:** any Region where the Optimized engine and Anthropic Claude Haiku 5.5 and Sonnet 5.5 on Amazon Bedrock are
-  available. `demo/litellm/config.yaml` uses the `us.` cross-Region inference profiles; outside the US, change the
-  prefix to `eu.` or `apac.` and update the two ARNs in `iam/host-role-policy.json`.
+  available. Set `MODEL_PREFIX` in `config.env` to the prefix of the Bedrock cross-Region inference profiles your
+  Region offers: `us` (the default), `eu`, `apac`, `au`, `jp` or `global`. To list them:
+  `aws bedrock list-inference-profiles --query "inferenceProfileSummaries[?contains(inferenceProfileId,'claude-haiku-5-5')].inferenceProfileId" --output text`
 - **OpenSearch version:** the newest OpenSearch 3.x the service offers. 3.7 is the minimum.
 - **Instance types:** the first type in each list that is offered in your Region and Availability Zone. The commands
   in steps 1 and 4 pick it for you.
@@ -63,12 +64,17 @@ logger emits twice. See the
   the tests also need `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says
   `python3`, and use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
-  older CLI, create the domain in the console and run every other command as written.
+  older CLI, create the domain in the console and run every other command as written. CloudShell has a current CLI.
+  On Windows without admin rights, extract the installer to a user folder and put it first on PATH:
+  `msiexec /a AWSCLIV2.msi /qn TARGETDIR=%USERPROFILE%\awscli-v2`, then use `%USERPROFILE%\awscli-v2\Amazon\AWSCLIV2\aws.exe`.
 - **Permissions:** an IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM,
   CloudWatch Logs, and Bedrock.
-- **Bedrock model access** for the two models. Check with:
+- **Bedrock model access** for the two models. Check each with your prefix (`us` here). The message is read from a
+  file, so the same command works in bash and PowerShell:
   ```bash
-  aws bedrock-runtime converse --model-id us.anthropic.claude-haiku-5-5 --messages '[{"role":"user","content":[{"text":"hi"}]}]' --query 'output.message.content[0].text'
+  echo '[{"role":"user","content":[{"text":"hi"}]}]' > msg.json
+  aws bedrock-runtime converse --model-id us.anthropic.claude-haiku-5-5 --messages file://msg.json --query 'output.message.content[0].text'
+  aws bedrock-runtime converse --model-id us.anthropic.claude-sonnet-5-5 --messages file://msg.json --query 'output.message.content[0].text'
   ```
 - **Cost:** about $1 an hour (about $25 a day) while it runs, at November 2026 list prices in us-east-1: two
   `or2.large.search` nodes at $0.20, one ingestion OCU at $0.24, one `m6i.2xlarge` at $0.384, and about $0.01 of
@@ -80,7 +86,9 @@ logger emits twice. See the
 
 This README is written so a coding agent can run it. If you are an agent: check the prerequisites first, fixing or
 working around anything the README allows, and resolve the instance types, the default VPC subnet and the OpenSearch
-version with the commands in steps 1 and 4. Then send the person this message, filled in, and wait:
+version with the commands in steps 1 and 4. Fill `config.env` (set `MODEL_PREFIX` for the Region) and run the name
+check at the start of Deployment; if it lists anything, change the names and `PROJECT_TAG` in `config.env` until it
+lists nothing, and say so in a note. Then send the person this message, filled in, and wait:
 
 > Hi! I'll set up the **Amazon OpenSearch optimized engine sample** from AWS Samples. It shows one engine running analytics and text search together over your OpenTelemetry logs and traces, including traces from an AI agent.
 >
@@ -153,12 +161,30 @@ for t in aws jq python awscurl; do command -v $t >/dev/null || echo "missing: $t
 TAG="Key=project,Value=$PROJECT_TAG"
 ```
 
+Before you create anything, check that the names in `config.env` are new in this account. `scripts/cleanup.sh` deletes
+the resources named in `config.env` that carry `project=$PROJECT_TAG`, so a second deployment with the same names and
+tag would be deleted with this one, and step 2 fails on names that exist. The check is read-only; if it prints
+anything, change the names and `PROJECT_TAG` in `config.env`, render again, and repeat until it prints nothing:
+
+```bash
+aws s3api head-bucket --bucket $DLQ_BUCKET >/dev/null 2>&1 && echo "exists: bucket $DLQ_BUCKET"
+aws s3api head-bucket --bucket $CONFIG_BUCKET >/dev/null 2>&1 && echo "exists: bucket $CONFIG_BUCKET"
+aws iam get-role --role-name $PIPELINE_ROLE >/dev/null 2>&1 && echo "exists: role $PIPELINE_ROLE"
+aws iam get-role --role-name $HOST_ROLE >/dev/null 2>&1 && echo "exists: role $HOST_ROLE"
+aws iam get-instance-profile --instance-profile-name $HOST_ROLE >/dev/null 2>&1 && echo "exists: instance profile $HOST_ROLE"
+aws opensearch describe-domain --domain-name $DOMAIN_NAME >/dev/null 2>&1 && echo "exists: domain $DOMAIN_NAME"
+aws osis get-pipeline --pipeline-name $PIPELINE_NAME >/dev/null 2>&1 && echo "exists: pipeline $PIPELINE_NAME"
+aws logs describe-log-groups --log-group-name-prefix /aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME \
+  --query "logGroups[?logGroupName=='/aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME'].logGroupName" --output text \
+  | tr -d '\r' | grep -q . && echo "exists: log group /aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME"
+```
+
 1. **Domain.** In the console: Create domain, Standard create, use case Observability, engine mode Optimized,
    the newest OpenSearch version offered (3.7 or later), two data nodes of the first type offered from the list in
    Prerequisites (`or2.large.search`, then `or1.large.search`), 20 GB gp3 per node,
    fine-grained access control with your IAM identity as master user, and the tag `project=$PROJECT_TAG`. Or from the CLI:
    ```bash
-   VERSION=$(aws opensearch list-versions --query "Versions[?starts_with(@, 'OpenSearch_3.')] | [0]" --output text)   # newest first
+   VERSION=$(aws opensearch list-versions --query "Versions[?starts_with(@, 'OpenSearch_3.')] | [0]" --output text | tr -d '\r')   # newest first
    for t in or2.large.search or1.large.search; do   # first OpenSearch Optimized Instance type offered for this version
      aws opensearch describe-instance-type-limits --instance-type $t --engine-version $VERSION >/dev/null 2>&1 && OS_TYPE=$t && break
    done; echo "$VERSION on $OS_TYPE"
@@ -217,17 +243,18 @@ TAG="Key=project,Value=$PROJECT_TAG"
    hop limit 2 so containers can use the instance role. It needs outbound internet (a public IP in a default-VPC
    subnet is enough) and nothing inbound:
    ```bash
-   VPC=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)
+   VPC=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text | tr -d '\r')
    read SUBNET AZ < <(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC Name=default-for-az,Values=true \
      --query 'Subnets[0].[SubnetId,AvailabilityZone]' --output text | tr -d '\r')
    OFFERED=$(aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=location,Values=$AZ \
-     Name=instance-type,Values=m6i.2xlarge,m6a.2xlarge,m7i.2xlarge,m7a.2xlarge --query 'InstanceTypeOfferings[].InstanceType' --output text)
+     Name=instance-type,Values=m6i.2xlarge,m6a.2xlarge,m7i.2xlarge,m7a.2xlarge --query 'InstanceTypeOfferings[].InstanceType' --output text | tr -d '\r')
    for t in m6i.2xlarge m6a.2xlarge m7i.2xlarge m7a.2xlarge; do echo "$OFFERED" | grep -qw "$t" && EC2_TYPE=$t && break; done
    echo "$EC2_TYPE in $SUBNET ($AZ)"
    SG_ID=$(aws ec2 create-security-group --group-name $PIPELINE_NAME-host --description "demo host, no inbound" --vpc-id $VPC \
-     --tag-specifications "ResourceType=security-group,Tags=[{$TAG}]" --query GroupId --output text)
+     --tag-specifications "ResourceType=security-group,Tags=[{$TAG}]" --query GroupId --output text | tr -d '\r')
+   AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query Parameter.Value --output text | tr -d '\r')
    aws ec2 run-instances --instance-type $EC2_TYPE --count 1 --subnet-id $SUBNET --associate-public-ip-address --security-group-ids $SG_ID \
-     --image-id $(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query Parameter.Value --output text) \
+     --image-id $AMI \
      --iam-instance-profile Name=$HOST_ROLE --user-data file://rendered/demo/user-data.sh \
      --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=60,VolumeType=gp3,Encrypted=true}' \
      --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2 \
@@ -252,7 +279,9 @@ TAG="Key=project,Value=$PROJECT_TAG"
    $PY scripts/setup_ui.py --admins <console identity>
    ```
    `<console identity>` is the ARN you sign in to the console with: the user ARN for an IAM user, the session ARN
-   (`arn:aws:sts::<account>:assumed-role/<role>/<session>`) for a role. It prints `UI_ENDPOINT`. Open that URL signed
+   (`arn:aws:sts::<account>:assumed-role/<role>/<session>`) for a role. The script also makes the identity running it
+   an admin of the application, which it needs to attach the domain to the workspace. If it prints "data source not
+   ready yet", run it again after a few minutes. It prints `UI_ENDPOINT`. Open that URL signed
    in to the console, choose the workspace, and create two datasets under Data → Datasets (the UI fills in their
    field lists, the API does not):
 
