@@ -94,7 +94,7 @@ def create_workspace(session, region, host, name, principals):
     for _ in range(8):
         st, body = ui("GET", "/api/saved_objects/_find?type=data-source&per_page=50")
         srcs = json.loads(body).get("saved_objects", []) if st == 200 else []
-        if srcs: ds_id = srcs[0]["id"]; break
+        if srcs: ds_id = srcs[0]["id"]; ds_name = srcs[0].get("attributes", {}).get("title") or ds_id; break
         time.sleep(15)
     if not ds_id: print("Workspace: data source not ready yet; re-run this script in a few minutes"); return
     st, body = ui("POST", "/api/workspaces/_list", {"perPage": 100})
@@ -108,7 +108,8 @@ def create_workspace(session, region, host, name, principals):
                        "features": ["use-case-observability"], "color": "#54B399"},
         "settings": {"dataSources": [ds_id], "permissions": perms}})
     if st == 200 and json.loads(body).get("success"):
-        print(f'Workspace: created "{name}" ({json.loads(body)["result"]["id"]}), editable by {", ".join(users)}')
+        print(f'Workspace: created "{name}" ({json.loads(body)["result"]["id"]}) with data source {ds_name}, '
+              f'editable by {", ".join(users)}')
     else:
         print(f"Workspace: not created ({st}); create it in the console. {body[:160]}")
 

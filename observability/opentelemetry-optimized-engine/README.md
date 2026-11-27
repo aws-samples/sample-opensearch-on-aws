@@ -64,7 +64,8 @@ logger emits twice. See the
   the tests also need `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says
   `python3`, and use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
-  older CLI, create the domain in the console and run every other command as written. CloudShell has a current CLI.
+  older CLI, create the domain in the console, or with boto3 (`create_domain` accepts `EngineMode="OPTIMIZED"` and
+  `UseCase="OBSERVABILITY"`), and run every other command as written. CloudShell has a current CLI.
   On Windows without admin rights, extract the installer to a user folder and put it first on PATH:
   `msiexec /a AWSCLIV2.msi /qn TARGETDIR=%USERPROFILE%\awscli-v2`, then use `%USERPROFILE%\awscli-v2\Amazon\AWSCLIV2\aws.exe`.
 - **Permissions:** an IAM identity with rights on OpenSearch Service, OpenSearch Ingestion, IAM, S3, EC2, SSM,
@@ -161,7 +162,8 @@ for t in aws jq python awscurl; do command -v $t >/dev/null || echo "missing: $t
 TAG="Key=project,Value=$PROJECT_TAG"
 ```
 
-Before you create anything, check that the names in `config.env` are new in this account. `scripts/cleanup.sh` deletes
+Before you create anything, check that the names in `config.env` are new in this account. Run the check in bash
+(Git Bash on Windows), in the same shell as the block above. `scripts/cleanup.sh` deletes
 the resources named in `config.env` that carry `project=$PROJECT_TAG`, so a second deployment with the same names and
 tag would be deleted with this one, and step 2 fails on names that exist. The check is read-only; if it prints
 anything, change the names and `PROJECT_TAG` in `config.env`, render again, and repeat until it prints nothing:

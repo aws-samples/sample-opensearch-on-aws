@@ -252,6 +252,7 @@ def test_ui_admins_always_include_the_identity_running_the_script():
     assert m.app_admins([cli], cli) == [cli]
     src = read("scripts/setup_ui.py")
     assert "json.dumps(ui_admins)" in src and "have + ui_admins" in src and "a.workspace, ui_admins" in src
+    assert "with data source {ds_name}" in src   # the success line names the attached data source
 
 def test_readme_checks_names_before_creating_and_strips_carriage_returns():
     r = read("README.md")
