@@ -1,0 +1,6 @@
+This folder contains a modified copy of a file from the OpenTelemetry Demo
+(https://github.com/open-telemetry/opentelemetry-demo), Copyright The OpenTelemetry Authors,
+licensed under the Apache License, Version 2.0:
+  demo/patches/agent/llm.py   tag 3.1.0 file src/agents/llm.py; modified: model chosen per conversation from LLM_MODEL_WEIGHTS
+demo/litellm/config.yaml is a configuration file for LiteLLM (https://github.com/BerriAI/litellm), MIT License.
+No LiteLLM source code is included.

@@ -1,0 +1,581 @@
+{
+  "index_patterns": [
+    "logs-otel-v1-*"
+  ],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "refresh_interval": "30s",
+      "index.sort.field": [
+        "serviceName",
+        "time"
+      ],
+      "index.sort.order": [
+        "asc",
+        "desc"
+      ],
+      "index.parquet.bloom_filter_enabled.field": [
+        "traceId"
+      ],
+      "index.parquet.bloom_filter_enabled.value": [
+        true
+      ]
+    },
+    "mappings": {
+      "dynamic": true,
+      "date_detection": false,
+      "dynamic_templates": [
+        {
+          "list_attributes_http_request_header": {
+            "path_match": "attributes.http.request.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_http_response_header": {
+            "path_match": "attributes.http.response.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_resource_attributes_process_command_args": {
+            "path_match": "resource.attributes.process.command_args",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "attributes_string": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "attributes_long": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "attributes_double": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "attributes_boolean": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "resource_attributes_string": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "resource_attributes_long": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "resource_attributes_double": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "resource_attributes_boolean": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_string": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_long": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_double": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_boolean": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false
+            }
+          }
+        }
+      ],
+      "properties": {
+        "time": {
+          "type": "date_nanos"
+        },
+        "@timestamp": {
+          "type": "date_nanos"
+        },
+        "observedTime": {
+          "type": "date_nanos"
+        },
+        "observedTimestamp": {
+          "type": "date_nanos"
+        },
+        "body": {
+          "type": "text"
+        },
+        "eventName": {
+          "type": "keyword",
+          "ignore_above": 1024,
+          "index": false
+        },
+        "severityText": {
+          "type": "keyword",
+          "ignore_above": 1024,
+          "index": false,
+          "low_cardinality": true
+        },
+        "severityNumber": {
+          "type": "integer"
+        },
+        "severity": {
+          "properties": {
+            "text": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "low_cardinality": true
+            },
+            "number": {
+              "type": "integer"
+            }
+          }
+        },
+        "traceId": {
+          "type": "keyword",
+          "ignore_above": 32,
+          "index": false
+        },
+        "spanId": {
+          "type": "keyword",
+          "ignore_above": 16,
+          "index": false
+        },
+        "flags": {
+          "type": "integer"
+        },
+        "schemaUrl": {
+          "type": "keyword",
+          "ignore_above": 512,
+          "index": false
+        },
+        "serviceName": {
+          "type": "keyword",
+          "ignore_above": 1024,
+          "index": false,
+          "low_cardinality": true
+        },
+        "droppedAttributesCount": {
+          "type": "integer"
+        },
+        "attributes": {
+          "properties": {
+            "http": {
+              "type": "object"
+            },
+            "url": {
+              "type": "object"
+            },
+            "rpc": {
+              "type": "object"
+            },
+            "db": {
+              "type": "object"
+            },
+            "messaging": {
+              "type": "object"
+            },
+            "net": {
+              "type": "object"
+            },
+            "network": {
+              "type": "object"
+            },
+            "server": {
+              "type": "object"
+            },
+            "client": {
+              "type": "object"
+            },
+            "peer": {
+              "type": "object"
+            },
+            "gen_ai": {
+              "type": "object"
+            },
+            "exception": {
+              "type": "object"
+            },
+            "error": {
+              "type": "object"
+            },
+            "code": {
+              "type": "object"
+            },
+            "thread": {
+              "type": "object"
+            },
+            "session": {
+              "type": "object"
+            },
+            "user": {
+              "type": "object"
+            },
+            "user_agent": {
+              "type": "object"
+            },
+            "feature_flag": {
+              "type": "object"
+            },
+            "traceloop": {
+              "type": "object"
+            },
+            "demo": {
+              "type": "object"
+            },
+            "app": {
+              "type": "object"
+            },
+            "kafka": {
+              "type": "object"
+            },
+            "grpc": {
+              "type": "object"
+            },
+            "otel": {
+              "type": "object"
+            },
+            "log": {
+              "type": "object"
+            },
+            "process": {
+              "type": "object"
+            },
+            "host": {
+              "type": "object"
+            },
+            "os": {
+              "type": "object"
+            },
+            "container": {
+              "type": "object"
+            },
+            "k8s": {
+              "type": "object"
+            },
+            "cloud": {
+              "type": "object"
+            },
+            "service": {
+              "type": "object"
+            },
+            "telemetry": {
+              "type": "object"
+            },
+            "deployment": {
+              "type": "object"
+            },
+            "aws": {
+              "type": "object"
+            },
+            "faas": {
+              "type": "object"
+            },
+            "enduser": {
+              "type": "object"
+            },
+            "tls": {
+              "type": "object"
+            },
+            "dns": {
+              "type": "object"
+            },
+            "file": {
+              "type": "object"
+            },
+            "system": {
+              "type": "object"
+            },
+            "ai": {
+              "type": "object"
+            },
+            "llm": {
+              "type": "object"
+            }
+          }
+        },
+        "resource": {
+          "properties": {
+            "schemaUrl": {
+              "type": "keyword",
+              "ignore_above": 512,
+              "index": false
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "properties": {
+                "http": {
+                  "type": "object"
+                },
+                "url": {
+                  "type": "object"
+                },
+                "rpc": {
+                  "type": "object"
+                },
+                "db": {
+                  "type": "object"
+                },
+                "messaging": {
+                  "type": "object"
+                },
+                "net": {
+                  "type": "object"
+                },
+                "network": {
+                  "type": "object"
+                },
+                "server": {
+                  "type": "object"
+                },
+                "client": {
+                  "type": "object"
+                },
+                "peer": {
+                  "type": "object"
+                },
+                "gen_ai": {
+                  "type": "object"
+                },
+                "exception": {
+                  "type": "object"
+                },
+                "error": {
+                  "type": "object"
+                },
+                "code": {
+                  "type": "object"
+                },
+                "thread": {
+                  "type": "object"
+                },
+                "session": {
+                  "type": "object"
+                },
+                "user": {
+                  "type": "object"
+                },
+                "user_agent": {
+                  "type": "object"
+                },
+                "feature_flag": {
+                  "type": "object"
+                },
+                "traceloop": {
+                  "type": "object"
+                },
+                "demo": {
+                  "type": "object"
+                },
+                "app": {
+                  "type": "object"
+                },
+                "kafka": {
+                  "type": "object"
+                },
+                "grpc": {
+                  "type": "object"
+                },
+                "otel": {
+                  "type": "object"
+                },
+                "log": {
+                  "type": "object"
+                },
+                "process": {
+                  "type": "object"
+                },
+                "host": {
+                  "type": "object"
+                },
+                "os": {
+                  "type": "object"
+                },
+                "container": {
+                  "type": "object"
+                },
+                "k8s": {
+                  "type": "object"
+                },
+                "cloud": {
+                  "type": "object"
+                },
+                "service": {
+                  "type": "object"
+                },
+                "telemetry": {
+                  "type": "object"
+                },
+                "deployment": {
+                  "type": "object"
+                },
+                "aws": {
+                  "type": "object"
+                },
+                "faas": {
+                  "type": "object"
+                },
+                "enduser": {
+                  "type": "object"
+                },
+                "tls": {
+                  "type": "object"
+                },
+                "dns": {
+                  "type": "object"
+                },
+                "file": {
+                  "type": "object"
+                },
+                "system": {
+                  "type": "object"
+                },
+                "ai": {
+                  "type": "object"
+                },
+                "llm": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "instrumentationScope": {
+          "properties": {
+            "name": {
+              "type": "keyword",
+              "ignore_above": 256,
+              "index": false
+            },
+            "version": {
+              "type": "keyword",
+              "ignore_above": 64,
+              "index": false
+            },
+            "schemaUrl": {
+              "type": "keyword",
+              "ignore_above": 512,
+              "index": false
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

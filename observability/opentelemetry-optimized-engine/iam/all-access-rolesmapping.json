@@ -1,0 +1,10 @@
+{
+  "backend_roles": [
+    "{{ADMIN_ARN}}",
+    "arn:aws:iam::{{ACCOUNT_ID}}:role/{{PIPELINE_ROLE}}"
+  ],
+  "hosts": [],
+  "users": [
+    "{{ADMIN_ARN}}"
+  ]
+}

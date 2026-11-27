@@ -1,0 +1,914 @@
+{
+  "index_patterns": [
+    "otel-v2-apm-span-*"
+  ],
+  "priority": 500,
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "refresh_interval": "30s",
+      "index.sort.field": [
+        "serviceName",
+        "startTime"
+      ],
+      "index.sort.order": [
+        "asc",
+        "desc"
+      ]
+    },
+    "mappings": {
+      "dynamic": true,
+      "date_detection": false,
+      "dynamic_templates": [
+        {
+          "events_attributes_string": {
+            "path_match": "events.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "events_attributes_long": {
+            "path_match": "events.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "events_attributes_double": {
+            "path_match": "events.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "events_attributes_boolean": {
+            "path_match": "events.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "links_attributes_string": {
+            "path_match": "links.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "links_attributes_long": {
+            "path_match": "links.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "links_attributes_double": {
+            "path_match": "links.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "links_attributes_boolean": {
+            "path_match": "links.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_gen_ai_response_finish_reasons": {
+            "path_match": "attributes.gen_ai.response.finish_reasons",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_gen_ai_workflow_nodes": {
+            "path_match": "attributes.gen_ai.workflow.nodes",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_gen_ai_workflow_edges": {
+            "path_match": "attributes.gen_ai.workflow.edges",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_traceloop_association_properties_langgraph_path": {
+            "path_match": "attributes.traceloop.association.properties.langgraph_path",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_traceloop_association_properties_langgraph_triggers": {
+            "path_match": "attributes.traceloop.association.properties.langgraph_triggers",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_demo_product_filtered_list": {
+            "path_match": "attributes.demo.product.filtered.list",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_http_request_header": {
+            "path_match": "attributes.http.request.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_attributes_http_response_header": {
+            "path_match": "attributes.http.response.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "list_resource_attributes_process_command_args": {
+            "path_match": "resource.attributes.process.command_args",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "attributes_string": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "attributes_long": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "attributes_double": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "attributes_boolean": {
+            "path_match": "attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "resource_attributes_string": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "resource_attributes_long": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "resource_attributes_double": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "resource_attributes_boolean": {
+            "path_match": "resource.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_string": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_long": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_double": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "instrumentationScope_attributes_boolean": {
+            "path_match": "instrumentationScope.attributes.*",
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        },
+        {
+          "gen_ai_strings": {
+            "path_match": "gen_ai.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        }
+      ],
+      "properties": {
+        "traceId": {
+          "type": "keyword",
+          "ignore_above": 32
+        },
+        "spanId": {
+          "type": "keyword",
+          "ignore_above": 16
+        },
+        "parentSpanId": {
+          "type": "keyword",
+          "ignore_above": 16
+        },
+        "traceState": {
+          "type": "keyword",
+          "ignore_above": 1024
+        },
+        "name": {
+          "type": "keyword",
+          "ignore_above": 1024
+        },
+        "kind": {
+          "type": "keyword",
+          "ignore_above": 1024
+        },
+        "serviceName": {
+          "type": "keyword",
+          "ignore_above": 1024
+        },
+        "traceGroup": {
+          "type": "keyword",
+          "ignore_above": 1024
+        },
+        "startTime": {
+          "type": "date_nanos"
+        },
+        "endTime": {
+          "type": "date_nanos"
+        },
+        "@timestamp": {
+          "type": "date_nanos"
+        },
+        "time": {
+          "type": "date_nanos"
+        },
+        "durationInNanos": {
+          "type": "long"
+        },
+        "flags": {
+          "type": "integer"
+        },
+        "droppedAttributesCount": {
+          "type": "integer"
+        },
+        "droppedEventsCount": {
+          "type": "integer"
+        },
+        "droppedLinksCount": {
+          "type": "integer"
+        },
+        "schemaUrl": {
+          "type": "keyword",
+          "ignore_above": 512
+        },
+        "status": {
+          "properties": {
+            "code": {
+              "type": "integer"
+            },
+            "message": {
+              "type": "keyword",
+              "ignore_above": 2048
+            }
+          }
+        },
+        "traceGroupFields": {
+          "properties": {
+            "endTime": {
+              "type": "date_nanos"
+            },
+            "durationInNanos": {
+              "type": "long"
+            },
+            "statusCode": {
+              "type": "integer"
+            }
+          }
+        },
+        "resource": {
+          "properties": {
+            "schemaUrl": {
+              "type": "keyword",
+              "ignore_above": 512
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "properties": {
+                "http": {
+                  "type": "object"
+                },
+                "url": {
+                  "type": "object"
+                },
+                "rpc": {
+                  "type": "object"
+                },
+                "db": {
+                  "type": "object"
+                },
+                "messaging": {
+                  "type": "object"
+                },
+                "net": {
+                  "type": "object"
+                },
+                "network": {
+                  "type": "object"
+                },
+                "server": {
+                  "type": "object"
+                },
+                "client": {
+                  "type": "object"
+                },
+                "peer": {
+                  "type": "object"
+                },
+                "gen_ai": {
+                  "type": "object"
+                },
+                "exception": {
+                  "type": "object"
+                },
+                "error": {
+                  "type": "object"
+                },
+                "code": {
+                  "type": "object"
+                },
+                "thread": {
+                  "type": "object"
+                },
+                "session": {
+                  "type": "object"
+                },
+                "user": {
+                  "type": "object"
+                },
+                "user_agent": {
+                  "type": "object"
+                },
+                "feature_flag": {
+                  "type": "object"
+                },
+                "traceloop": {
+                  "type": "object"
+                },
+                "demo": {
+                  "type": "object"
+                },
+                "app": {
+                  "type": "object"
+                },
+                "kafka": {
+                  "type": "object"
+                },
+                "grpc": {
+                  "type": "object"
+                },
+                "otel": {
+                  "type": "object"
+                },
+                "log": {
+                  "type": "object"
+                },
+                "process": {
+                  "type": "object"
+                },
+                "host": {
+                  "type": "object"
+                },
+                "os": {
+                  "type": "object"
+                },
+                "container": {
+                  "type": "object"
+                },
+                "k8s": {
+                  "type": "object"
+                },
+                "cloud": {
+                  "type": "object"
+                },
+                "service": {
+                  "type": "object"
+                },
+                "telemetry": {
+                  "type": "object"
+                },
+                "deployment": {
+                  "type": "object"
+                },
+                "aws": {
+                  "type": "object"
+                },
+                "faas": {
+                  "type": "object"
+                },
+                "enduser": {
+                  "type": "object"
+                },
+                "tls": {
+                  "type": "object"
+                },
+                "dns": {
+                  "type": "object"
+                },
+                "file": {
+                  "type": "object"
+                },
+                "system": {
+                  "type": "object"
+                },
+                "ai": {
+                  "type": "object"
+                },
+                "llm": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "instrumentationScope": {
+          "properties": {
+            "name": {
+              "type": "keyword",
+              "ignore_above": 256
+            },
+            "version": {
+              "type": "keyword",
+              "ignore_above": 64
+            },
+            "schemaUrl": {
+              "type": "keyword",
+              "ignore_above": 512
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "type": "object"
+            }
+          }
+        },
+        "events": {
+          "type": "nested",
+          "properties": {
+            "time": {
+              "type": "date_nanos"
+            },
+            "name": {
+              "type": "keyword",
+              "ignore_above": 1024
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "type": "object"
+            }
+          }
+        },
+        "links": {
+          "type": "nested",
+          "properties": {
+            "traceId": {
+              "type": "keyword",
+              "ignore_above": 32
+            },
+            "spanId": {
+              "type": "keyword",
+              "ignore_above": 16
+            },
+            "traceState": {
+              "type": "keyword",
+              "ignore_above": 1024
+            },
+            "droppedAttributesCount": {
+              "type": "integer"
+            },
+            "attributes": {
+              "type": "object"
+            }
+          }
+        },
+        "attributes": {
+          "properties": {
+            "http": {
+              "type": "object"
+            },
+            "url": {
+              "type": "object"
+            },
+            "rpc": {
+              "type": "object"
+            },
+            "db": {
+              "type": "object"
+            },
+            "messaging": {
+              "type": "object"
+            },
+            "net": {
+              "type": "object"
+            },
+            "network": {
+              "type": "object"
+            },
+            "server": {
+              "type": "object"
+            },
+            "client": {
+              "type": "object"
+            },
+            "peer": {
+              "type": "object"
+            },
+            "gen_ai": {
+              "properties": {
+                "usage": {
+                  "properties": {
+                    "input_tokens": {
+                      "type": "long"
+                    },
+                    "output_tokens": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "input": {
+                  "properties": {
+                    "messages": {
+                      "type": "keyword",
+                      "ignore_above": 32766
+                    }
+                  }
+                },
+                "output": {
+                  "properties": {
+                    "messages": {
+                      "type": "keyword",
+                      "ignore_above": 32766
+                    }
+                  }
+                },
+                "tool": {
+                  "properties": {
+                    "call": {
+                      "properties": {
+                        "arguments": {
+                          "type": "keyword",
+                          "ignore_above": 32766
+                        },
+                        "result": {
+                          "type": "keyword",
+                          "ignore_above": 32766
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "exception": {
+              "type": "object"
+            },
+            "error": {
+              "type": "object"
+            },
+            "code": {
+              "type": "object"
+            },
+            "thread": {
+              "type": "object"
+            },
+            "session": {
+              "type": "object"
+            },
+            "user": {
+              "type": "object"
+            },
+            "user_agent": {
+              "type": "object"
+            },
+            "feature_flag": {
+              "type": "object"
+            },
+            "traceloop": {
+              "type": "object"
+            },
+            "demo": {
+              "type": "object"
+            },
+            "app": {
+              "type": "object"
+            },
+            "kafka": {
+              "type": "object"
+            },
+            "grpc": {
+              "type": "object"
+            },
+            "otel": {
+              "type": "object"
+            },
+            "log": {
+              "type": "object"
+            },
+            "process": {
+              "type": "object"
+            },
+            "host": {
+              "type": "object"
+            },
+            "os": {
+              "type": "object"
+            },
+            "container": {
+              "type": "object"
+            },
+            "k8s": {
+              "type": "object"
+            },
+            "cloud": {
+              "type": "object"
+            },
+            "service": {
+              "type": "object"
+            },
+            "telemetry": {
+              "type": "object"
+            },
+            "deployment": {
+              "type": "object"
+            },
+            "aws": {
+              "type": "object"
+            },
+            "faas": {
+              "type": "object"
+            },
+            "enduser": {
+              "type": "object"
+            },
+            "tls": {
+              "type": "object"
+            },
+            "dns": {
+              "type": "object"
+            },
+            "file": {
+              "type": "object"
+            },
+            "system": {
+              "type": "object"
+            },
+            "ai": {
+              "type": "object"
+            },
+            "llm": {
+              "type": "object"
+            },
+            "derived": {
+              "properties": {
+                "gen_ai": {
+                  "properties": {
+                    "is_root": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "gen_ai": {
+          "properties": {
+            "operation": {
+              "properties": {
+                "name": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                }
+              }
+            },
+            "agent": {
+              "properties": {
+                "name": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                }
+              }
+            },
+            "provider": {
+              "properties": {
+                "name": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                }
+              }
+            },
+            "tool": {
+              "properties": {
+                "name": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "call": {
+                  "properties": {
+                    "arguments": {
+                      "type": "text"
+                    },
+                    "result": {
+                      "type": "text"
+                    }
+                  }
+                }
+              }
+            },
+            "request": {
+              "properties": {
+                "model": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                }
+              }
+            },
+            "response": {
+              "properties": {
+                "model": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                },
+                "finish_reasons": {
+                  "type": "keyword",
+                  "ignore_above": 1024
+                }
+              }
+            },
+            "conversation": {
+              "properties": {
+                "id": {
+                  "type": "keyword",
+                  "ignore_above": 128
+                }
+              }
+            },
+            "usage": {
+              "properties": {
+                "input_tokens": {
+                  "type": "long"
+                },
+                "output_tokens": {
+                  "type": "long"
+                }
+              }
+            },
+            "input": {
+              "properties": {
+                "messages": {
+                  "type": "text"
+                }
+              }
+            },
+            "output": {
+              "properties": {
+                "messages": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

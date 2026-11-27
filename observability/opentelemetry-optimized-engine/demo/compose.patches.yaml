@@ -1,0 +1,7 @@
+# File patches layer (loaded last): the agent picks a model per conversation by weight (LLM_MODEL_WEIGHTS).
+services:
+  agent:
+    volumes:
+      - ./patches/agent/llm.py:/app/src/agents/llm.py:ro
+    environment:
+      - LLM_MODEL_WEIGHTS

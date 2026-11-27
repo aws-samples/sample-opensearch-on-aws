@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "es:DescribeDomain",
+      "Resource": "arn:aws:es:{{REGION}}:{{ACCOUNT_ID}}:domain/{{DOMAIN_NAME}}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "es:ESHttp*",
+      "Resource": "arn:aws:es:{{REGION}}:{{ACCOUNT_ID}}:domain/{{DOMAIN_NAME}}/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::{{DLQ_BUCKET}}/*"
+    }
+  ]
+}

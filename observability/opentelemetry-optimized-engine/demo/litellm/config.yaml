@@ -1,0 +1,35 @@
+# LiteLLM proxy in front of Amazon Bedrock. The agent calls the `shop-agent` alias; weights give the 70/30 model split.
+model_list:
+  # the agent's alias; router simple-shuffle picks a deployment at random using `weight`
+  - model_name: shop-agent
+    litellm_params:
+      model: bedrock/converse/{{MODEL_PREFIX}}.anthropic.claude-haiku-5-5
+      aws_region_name: {{REGION}}
+      weight: 7
+  - model_name: shop-agent
+    litellm_params:
+      model: bedrock/converse/{{MODEL_PREFIX}}.anthropic.claude-sonnet-5-5
+      aws_region_name: {{REGION}}
+      weight: 3
+  # direct aliases: used by the tests below, and available for a later "model swap" chapter
+  - model_name: claude-haiku-5-5
+    litellm_params:
+      model: bedrock/converse/{{MODEL_PREFIX}}.anthropic.claude-haiku-5-5
+      aws_region_name: {{REGION}}
+  - model_name: claude-sonnet-5-5
+    litellm_params:
+      model: bedrock/converse/{{MODEL_PREFIX}}.anthropic.claude-sonnet-5-5
+      aws_region_name: {{REGION}}
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  allowed_fails: 3
+
+litellm_settings:
+  drop_params: true        # drop OpenAI-only params Bedrock does not accept
+  modify_params: true      # let LiteLLM fix Bedrock message quirks (e.g. empty assistant text next to tool calls)
+  request_timeout: 60
+
+general_settings:
+  disable_spend_logs: true
