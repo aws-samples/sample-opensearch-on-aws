@@ -116,6 +116,114 @@
           }
         },
         {
+          "list_attributes_gen_ai_response_finish_reasons": {
+            "path_match": "attributes.gen_ai.response.finish_reasons",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_gen_ai_workflow_nodes": {
+            "path_match": "attributes.gen_ai.workflow.nodes",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_gen_ai_workflow_edges": {
+            "path_match": "attributes.gen_ai.workflow.edges",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_traceloop_association_properties_langgraph_path": {
+            "path_match": "attributes.traceloop.association.properties.langgraph_path",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_traceloop_association_properties_langgraph_triggers": {
+            "path_match": "attributes.traceloop.association.properties.langgraph_triggers",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_demo_product_filtered_list": {
+            "path_match": "attributes.demo.product.filtered.list",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_http_request_header": {
+            "path_match": "attributes.http.request.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_http_response_header": {
+            "path_match": "attributes.http.response.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_resource_attributes_process_command_args": {
+            "path_match": "resource.attributes.process.command_args",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
           "attributes_string": {
             "path_match": "attributes.*",
             "match_mapping_type": "string",

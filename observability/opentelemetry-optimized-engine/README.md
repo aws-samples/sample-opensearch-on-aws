@@ -18,7 +18,8 @@ Requires OpenSearch 3.7 or later; the commands below create the domain on the ne
 Validated in November 2026 on OpenSearch 3.7 with OpenTelemetry Demo 3.1.0 in us-east-1.
 
 ```
-templates/   index templates for spans and logs; tuned/ adds index:false, a bloom filter and low_cardinality
+templates/   index templates for spans and logs; tuned/ adds index:false, a bloom filter and low_cardinality;
+             general-purpose/ is the same mapping without multi_value, for the storage comparison
 pipeline/    OpenSearch Ingestion pipeline; pipeline-storage-comparison.yaml adds a General Purpose sink to compare storage
 iam/         pipeline role, EC2 host role, domain access policy, fine-grained access control role mapping
 collector/   the OpenTelemetry Demo Collector override (SigV4 to the pipeline)
@@ -60,7 +61,7 @@ logger emits twice. See the
   in steps 1 and 4 pick it for you.
   - Domain data nodes, OpenSearch Optimized Instances: `or2.large.search`, then `or1.large.search`.
   - Demo host (x86_64, 32 GB RAM): `m6i.2xlarge`, `m6a.2xlarge`, `m7i.2xlarge`, `m7a.2xlarge`.
-- **Tools:** bash, `jq`, Python 3.9 or later, and `awscurl` (`python3 -m pip install awscurl`). `scripts/setup_ui.py` and
+- **Tools:** bash, `jq`, Python 3.10 or later (boto3 and botocore 1.44 require it), and `awscurl` (`python3 -m pip install awscurl`). `scripts/setup_ui.py` and
   the tests also need `python3 -m pip install -r requirements.txt`. On Windows, use `python` wherever this README says
   `python3`, and use Git Bash (`C:\Program Files\Git\bin\bash.exe`), not the WSL `bash` that may come first on PATH.
 - **AWS CLI 2.35.14 or later.** `--engine-mode` and `--use-case` on `create-domain` are new in that version; with an
@@ -179,7 +180,13 @@ aws osis get-pipeline --pipeline-name $PIPELINE_NAME >/dev/null 2>&1 && echo "ex
 aws logs describe-log-groups --log-group-name-prefix /aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME \
   --query "logGroups[?logGroupName=='/aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME'].logGroupName" --output text \
   | tr -d '\r' | grep -q . && echo "exists: log group /aws/vendedlogs/OpenSearchIngestion/$PIPELINE_NAME"
+aws opensearch list-applications --query "ApplicationSummaries[?name=='$DOMAIN_NAME-ui'].id" --output text \
+  | tr -d '\r' | grep -q . && echo "exists: OpenSearch UI application $DOMAIN_NAME-ui"
 ```
+
+The sample needs its own, new OpenSearch UI application (`$DOMAIN_NAME-ui`). `scripts/setup_ui.py` adds admins to an
+existing application of that name only if it carries `project=$PROJECT_TAG` and has this domain as its data source;
+otherwise it stops without changing anything.
 
 1. **Domain.** In the console: Create domain, Standard create, use case Observability, engine mode Optimized,
    the newest OpenSearch version offered (3.7 or later), two data nodes of the first type offered from the list in
@@ -311,7 +318,10 @@ aws logs describe-log-groups --log-group-name-prefix /aws/vendedlogs/OpenSearchI
 ## Storage comparison
 
 `pipeline/pipeline-storage-comparison.yaml` writes every document to a second, General Purpose domain with the same
-templates. After a day, force-merge both and compare `pri.store.size` from `_cat/indices`. Count spans on the
+mapping. Install it from `templates/general-purpose/`, which is `templates/` without `multi_value` (an Optimized-engine
+parameter that General Purpose rejects; General Purpose accepts lists in any field):
+`scripts/install-templates.sh rendered/templates/general-purpose $GP_DOMAIN_ENDPOINT $REGION`.
+After a day, force-merge both and compare `pri.store.size` from `_cat/indices`. Count spans on the
 Optimized domain: on General Purpose, nested span events count as extra Lucene documents.
 
 ## Tests

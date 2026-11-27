@@ -28,6 +28,42 @@
       "date_detection": false,
       "dynamic_templates": [
         {
+          "list_attributes_http_request_header": {
+            "path_match": "attributes.http.request.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_attributes_http_response_header": {
+            "path_match": "attributes.http.response.header.*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
+          "list_resource_attributes_process_command_args": {
+            "path_match": "resource.attributes.process.command_args",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024,
+              "index": false,
+              "multi_value": true
+            }
+          }
+        },
+        {
           "attributes_string": {
             "path_match": "attributes.*",
             "match_mapping_type": "string",

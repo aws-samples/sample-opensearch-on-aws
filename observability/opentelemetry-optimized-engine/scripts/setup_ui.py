@@ -1,8 +1,10 @@
 """OpenSearch UI for this sample, in one step (idempotent):
   1. adds your console identity to the domain's all_access mapping (merged with what is there)
   2. creates the OpenSearch UI application <DOMAIN_NAME>-ui on the domain, with your console identity and the identity
-     running this script as admins, tagged project=<PROJECT_TAG>; if it exists, adds missing admins. The script's own
-     identity must be an admin: without it, the application hides the data source and step 4 cannot attach it.
+     running this script as admins, tagged project=<PROJECT_TAG>. An existing application of that name is reused (and
+     missing admins added) only if it carries the same tag and has this domain as its data source; otherwise the script
+     stops without changing anything. The script's own identity must be an admin: without it, the application hides
+     the data source and step 4 cannot attach it.
   3. enables Ask AI on the application (free; skipped with a note where the Region does not offer it)
   4. creates an Observability workspace with the domain attached and edit access for the admins
 Datasets stay a console step: the UI fills in their field lists, the API does not.
@@ -43,15 +45,30 @@ def signed(session, region, service, method, url, body=None, extra=None):
     except urllib.error.HTTPError as e: return e.code, e.read().decode("utf-8", "replace")
     except Exception as e: return None, f"{type(e).__name__}: {e}"  # noqa: BLE001
 
-def mapping_entry(arn):
-    """Console identity -> (list, value) in the security plugin's role mapping."""
+def mapping_entry(arn, iam=None):
+    """Console identity -> (list, value) in the security plugin's role mapping.
+    A session ARN (arn:aws:sts::<acct>:assumed-role/<Role>/<session>) names the role without its IAM path, but the
+    backend role the domain matches is the full role ARN, path included (IAM Identity Center roles live under
+    /aws-reserved/sso.amazonaws.com/...). So the role ARN is read with iam:GetRole; without that permission the
+    path-less ARN is used and a warning says to map the full ARN by hand."""
     m = re.match(r"arn:aws:sts::(\d{12}):assumed-role/([^/]+)/", arn)
-    if m: return "backend_roles", f"arn:aws:iam::{m.group(1)}:role/{m.group(2)}"
+    if m:
+        if iam is not None:
+            try: return "backend_roles", iam.get_role(RoleName=m.group(2))["Role"]["Arn"]
+            except ClientError as e:
+                print(f"all_access: could not read role {m.group(2)} ({e.response.get('Error', {}).get('Code', '')}); "
+                      f"if it has an IAM path, map its full role ARN to all_access by hand")
+        return "backend_roles", f"arn:aws:iam::{m.group(1)}:role/{m.group(2)}"
     if ":role/" in arn: return "backend_roles", arn
     if ":user/" in arn: return "users", arn
     sys.exit(f"--admins: not an IAM user, role, or assumed-role session ARN: {arn}")
 
-def map_all_access(session, region, endpoint, admins):
+def app_is_ours(app, tags, domain_arn, project_tag):
+    """Only an application this sample created for this domain may be reused (and its admin list extended)."""
+    srcs = {x.get("dataSourceArn") for x in app.get("dataSources", [])}
+    return domain_arn in srcs and tags.get("project") == project_tag
+
+def map_all_access(session, region, endpoint, admins, iam=None):
     url = f"https://{endpoint}/_plugins/_security/api/rolesmapping/all_access"
     st, body = signed(session, region, "es", "GET", url)
     if st != 200: print(f"all_access: could not read the mapping ({st}); add your console role by hand"); return
@@ -59,7 +76,7 @@ def map_all_access(session, region, endpoint, admins):
     new = {k: list(cur.get(k, [])) for k in ("backend_roles", "hosts", "users")}
     added = []
     for a in admins:
-        k, v = mapping_entry(a)
+        k, v = mapping_entry(a, iam)
         if v not in new[k]: new[k].append(v); added.append(v)
     if not added: print("all_access: console identity already mapped"); return
     st, body = signed(session, region, "es", "PUT", url, new)
@@ -126,12 +143,18 @@ def main():
     osc = s.client("opensearch")
     d = osc.describe_domain(DomainName=cfg["DOMAIN_NAME"])["DomainStatus"]
     if not d.get("Endpoint"): sys.exit(f"domain {cfg['DOMAIN_NAME']} has no endpoint yet; wait until it is active")
-    map_all_access(s, region, d["Endpoint"], admins)
     ui_admins = app_admins(admins, caller)
     app_name = f"{cfg['DOMAIN_NAME']}-ui"
     app = next((x for x in list_apps(osc) if x.get("name") == app_name), None)
-    if app:
+    if app:   # check ownership before changing anything
         cur = osc.get_application(id=app["id"])
+        tags = {t["Key"]: t["Value"] for t in osc.list_tags(ARN=cur["arn"]).get("TagList", [])}
+        if not app_is_ours(cur, tags, d["ARN"], cfg["PROJECT_TAG"]):
+            sys.exit(f"UI application {app_name} ({app['id']}) exists but was not created by this sample for domain "
+                     f"{cfg['DOMAIN_NAME']} (project tag {tags.get('project')!r}). Nothing was changed. This sample needs its "
+                     f"own application: change DOMAIN_NAME in config.env, or delete that application if it is yours.")
+    map_all_access(s, region, d["Endpoint"], admins, s.client("iam"))
+    if app:
         conf = {c["key"]: c["value"] for c in cur.get("appConfigs", [])}
         try: have = json.loads(conf.get("opensearchDashboards.dashboardAdmin.users", "[]"))
         except ValueError: have = [x.strip() for x in conf.get("opensearchDashboards.dashboardAdmin.users", "").split(",") if x.strip()]

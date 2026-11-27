@@ -89,6 +89,30 @@ def leaf(props, dotted):
 SPANS = json.loads(read("templates/otel-spans.json")); LOGS = json.loads(read("templates/otel-logs.json"))
 SPANS_T = json.loads(read("templates/tuned/otel-spans-tuned.json")); LOGS_T = json.loads(read("templates/tuned/otel-logs-tuned.json"))
 
+SPANS_GP = json.loads(read("templates/general-purpose/otel-spans.json")); LOGS_GP = json.loads(read("templates/general-purpose/otel-logs.json"))
+def list_rule_paths(t):
+    return {v["path_match"]: v["mapping"] for r in t["template"]["mappings"]["dynamic_templates"] for k, v in r.items() if k.startswith("list_")}
+def strip_multi(o):
+    if isinstance(o, dict): return {k: strip_multi(v) for k, v in o.items() if k != "multi_value"}
+    if isinstance(o, list): return [strip_multi(x) for x in o]
+    return o
+def test_list_valued_fields_are_multi_value_on_the_optimized_templates():
+    span_lists = {"attributes.gen_ai.response.finish_reasons", "attributes.gen_ai.workflow.nodes", "attributes.gen_ai.workflow.edges",
+                  "resource.attributes.process.command_args", "attributes.http.request.header.*"}
+    for t in (SPANS, SPANS_T):
+        rules = list_rule_paths(t)
+        assert span_lists <= set(rules) and all(m.get("multi_value") for m in rules.values())
+        root = t["template"]["mappings"]["properties"]["gen_ai"]["properties"]["response"]["properties"]["finish_reasons"]
+        assert root.get("multi_value") is True   # the pipeline copies the list-valued attribute here
+        dyn = t["template"]["mappings"]["dynamic_templates"]
+        first_generic = next(i for i, r in enumerate(dyn) if next(iter(r.values()))["path_match"] in ("attributes.*", "resource.attributes.*"))
+        assert all(i < first_generic for i, r in enumerate(dyn) if next(iter(r)).startswith("list_")), "list rules must precede the generic ones"
+    for t in (LOGS, LOGS_T):
+        assert "resource.attributes.process.command_args" in list_rule_paths(t)
+def test_general_purpose_templates_equal_the_default_without_multi_value():
+    assert "multi_value" not in json.dumps(SPANS_GP) and "multi_value" not in json.dumps(LOGS_GP)
+    assert SPANS_GP == strip_multi(SPANS) and LOGS_GP == strip_multi(LOGS)
+
 def test_templates_cover_the_pipeline_index_names():
     assert SPANS["index_patterns"] == ["otel-v2-apm-span-*"] and LOGS["index_patterns"] == ["logs-otel-v1-*"]
     assert SPANS_T["index_patterns"] == ["otel-v2-apm-span-*"] and LOGS_T["index_patterns"] == ["logs-otel-v1-*"]
@@ -244,6 +268,77 @@ def test_console_identity_goes_to_the_right_all_access_list():
     assert m.mapping_entry("arn:aws:sts::111122223333:assumed-role/Admin/jane-session") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
     assert m.mapping_entry("arn:aws:iam::111122223333:role/Admin") == ("backend_roles", "arn:aws:iam::111122223333:role/Admin")
     assert m.mapping_entry("arn:aws:iam::111122223333:user/jane") == ("users", "arn:aws:iam::111122223333:user/jane")
+
+class FakeIAM:
+    def __init__(self, arn=None, error=None): self.arn, self.error = arn, error
+    def get_role(self, RoleName):
+        if self.error:
+            from botocore.exceptions import ClientError
+            raise ClientError({"Error": {"Code": self.error}}, "GetRole")
+        return {"Role": {"Arn": self.arn}}
+
+def test_session_arn_maps_to_the_full_role_arn_including_its_path():
+    m = load_setup_ui()
+    sso = "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/us-east-1/AWSReservedSSO_Admin_0123456789abcdef"
+    session = "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_Admin_0123456789abcdef/jane@example.com"
+    assert m.mapping_entry(session, FakeIAM(arn=sso)) == ("backend_roles", sso)
+    # without iam:GetRole it falls back to the path-less ARN (and prints a warning)
+    assert m.mapping_entry(session, FakeIAM(error="AccessDenied")) == ("backend_roles", "arn:aws:iam::111122223333:role/AWSReservedSSO_Admin_0123456789abcdef")
+
+def test_existing_ui_application_is_reused_only_if_this_sample_created_it_for_this_domain():
+    m = load_setup_ui()
+    dom = "arn:aws:es:us-east-1:111122223333:domain/d"
+    ours = {"dataSources": [{"dataSourceArn": dom}]}
+    assert m.app_is_ours(ours, {"project": "t"}, dom, "t")
+    assert not m.app_is_ours(ours, {"project": "someone-else"}, dom, "t")
+    assert not m.app_is_ours(ours, {}, dom, "t")
+    assert not m.app_is_ours({"dataSources": [{"dataSourceArn": "arn:aws:es:us-east-1:111122223333:domain/other"}]}, {"project": "t"}, dom, "t")
+    src = read("scripts/setup_ui.py")
+    assert src.index("app_is_ours(cur") < src.index("map_all_access(s, region"), "ownership is checked before anything changes"
+    assert "exists: OpenSearch UI application $DOMAIN_NAME-ui" in read("README.md")
+
+def find_bash():
+    """A real bash: Git Bash on Windows (the WSL stub in WindowsApps can hang), else bash on PATH."""
+    if os.name == "nt":
+        for p in (r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files (x86)\Git\bin\bash.exe"):
+            if os.path.exists(p): return p
+        return None
+    return shutil.which("bash")
+
+def test_install_templates_fails_unless_the_domain_acknowledges():
+    import stat
+    with tempfile.TemporaryDirectory() as tmp:
+        bin_dir = os.path.join(tmp, "bin"); os.makedirs(bin_dir)
+        tdir = os.path.join(tmp, "t"); os.makedirs(tdir)
+        for n in ("otel-spans.json", "otel-logs.json"): open(os.path.join(tdir, n), "w").write("{}")
+        def run(response):
+            fake = os.path.join(bin_dir, "awscurl")
+            with open(fake, "w", newline="\n") as f: f.write(f"#!/bin/bash\necho '{response}'\nexit 0\n")   # awscurl exits 0 on HTTP errors
+            os.chmod(fake, os.stat(fake).st_mode | stat.S_IEXEC)
+            env = dict(os.environ, PATH=bin_dir + os.pathsep + os.environ.get("PATH", ""))
+            return subprocess.run([bash, os.path.join(ROOT, "scripts", "install-templates.sh"), tdir, "h", "r"],
+                                  capture_output=True, text=True, env=env, timeout=60)
+        bash = find_bash()
+        if not bash: import pytest; pytest.skip("bash not available")
+        ok = run('{"acknowledged":true}')
+        if "jq" in ok.stderr and ok.returncode != 0: import pytest; pytest.skip("jq not available")
+        assert ok.returncode == 0, ok.stdout + ok.stderr
+        bad = run('{"error":{"type":"mapper_parsing_exception"},"status":400}')
+        assert bad.returncode != 0 and "NOT installed" in bad.stderr
+
+def test_helper_scripts_are_executable_in_git():
+    r = subprocess.run(["git", "ls-files", "-s", "scripts"], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        import pytest; pytest.skip("not a git checkout")
+    modes = {l.split("\t")[1].rsplit("/", 1)[-1]: l.split()[0] for l in r.stdout.splitlines()}
+    for s in ("install-templates.sh", "check-ingestion.sh", "cleanup.sh"):
+        assert modes.get(s) == "100755", f"{s} is {modes.get(s)}"
+    for s in ("install-templates.sh", "check-ingestion.sh", "cleanup.sh"):
+        assert f"scripts/{s}" in read("README.md")
+
+def test_python_prerequisite_matches_boto3():
+    r = read("README.md")
+    assert "Python 3.10 or later" in r and "Python 3.9" not in r
 
 def test_ui_admins_always_include_the_identity_running_the_script():
     m = load_setup_ui()
