@@ -61,10 +61,11 @@ python score_live.py --since 2026-11-18T02:10:00Z --workers 6 --limit 20
 python check_evals.py 5
 ```
 
-Each pass scores the oldest unscored conversations first, at most `--limit` per pass, and continues immediately while
-a backlog remains. A conversation that cannot be scored (throttling, or a verdict missing any of the three scores or
-the hallucination flag) is never stored; it is retried on the next pass and given up, with a log line, after
-`--max-retry-passes` (default 5). Run the tests offline with `pip install pytest` and `python -m pytest evaluation/ deploy/`.
+A one-shot run (no `--loop`) scores the oldest unscored conversations first, up to `--limit` in total, then stops; a
+larger backlog is left for the next run. Under `--loop`, `--limit` is the per-pass batch size and the job keeps
+draining the backlog, then scores new conversations each cycle. A conversation that cannot be scored (throttling, an
+incomplete verdict, or an ambiguous judge response with more than one candidate verdict) is never stored; under
+`--loop` it is retried on the next pass and given up, with a log line, after `--max-retry-passes` (default 5). Run the tests offline with `pip install pytest` and `python -m pytest evaluation/ deploy/`.
 
 Throughput: ~90–120 conversations/min with 6 workers. Cost with Claude Sonnet 5.5 as the evaluation model:
 about 1 cent per conversation (≈ 1,000–2,500 input tokens of evidence, ~110 output tokens).

@@ -64,7 +64,14 @@ source .venv/bin/activate         # macOS / Linux
 pip install -r deploy/requirements.txt -r evaluation/requirements.txt
 ```
 If `python` is not found, use `python3` (common on macOS and Linux). The commands below work the same in PowerShell,
-bash and zsh. Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue
+bash and zsh.
+
+> **Use a unique deployment name and dedicated resources.** The deployment scripts may reuse existing resources with
+> matching names, including security groups, instance profiles and UI applications; their ownership and configuration
+> are not fully validated. The documented SSM-only access and scoped permissions assume freshly created sample
+> resources. Cleanup may delete named policies, so avoid sharing these resources with other workloads.
+
+Pick a name prefix (`agentobs` below) and a globally unique S3 bucket name for the pipeline's dead-letter queue
 (for example `<prefix>-dlq-<account-id>`). The scripts use us-east-1 unless you pass `--region`; they do not read
 your AWS CLI's default region. Each script is idempotent and prints the identifiers the next one needs.
 

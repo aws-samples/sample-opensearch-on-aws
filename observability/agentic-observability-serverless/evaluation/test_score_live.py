@@ -107,6 +107,48 @@ def test_permanent_failure_does_not_pin_the_watermark():
     assert "t00001" in give_up and nxt == UNTIL
 
 
+# ---------- finding: duplicate roots within one page must be scored once
+def test_duplicate_root_in_one_page_scored_once():
+    page = [{"traceId": "t1", "spanId": "a", "startTime": "2026-11-18T00:00:00001Z"},
+            {"traceId": "t1", "spanId": "b", "startTime": "2026-11-18T00:00:00002Z"},  # same traceId, same page
+            {"traceId": "t2", "spanId": "c", "startTime": "2026-11-18T00:00:00003Z"}]
+    s.iter_root_pages = lambda *a, **k: iter([page])
+    s.already_scored = lambda *a, **k: set()
+    todo, total, exhausted = s.next_unscored(None, SINCE, UNTIL, 100)
+    assert [r["traceId"] for r in todo] == ["t1", "t2"] and total == 2 and exhausted is True
+
+
+# ---------- finding: one-shot --limit is a total, not a per-pass batch that drains the backlog
+def test_one_shot_runs_one_pass_even_with_backlog():
+    calls = []
+
+    def do_pass():
+        calls.append(1)
+        return 20, True  # scored 20, backlog remains
+
+    total = s.drive(do_pass, loop=0, dry_run=False, sleep=lambda *_: None)
+    assert total == 20 and len(calls) == 1  # honours the total limit; does not keep draining
+
+
+def test_continuous_drains_backlog_then_waits():
+    seq = [(20, True), (20, True), (5, False)]
+    calls, sleeps = [], []
+
+    def do_pass():
+        calls.append(1)
+        return seq[len(calls) - 1]
+
+    def fake_sleep(x):
+        sleeps.append(x)
+        raise SystemExit  # stop the otherwise-infinite continuous loop once caught up
+
+    try:
+        s.drive(do_pass, loop=600, dry_run=False, sleep=fake_sleep)
+    except SystemExit:
+        pass
+    assert len(calls) == 3 and sleeps == [600]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

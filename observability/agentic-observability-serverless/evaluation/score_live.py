@@ -184,8 +184,12 @@ def next_unscored(os_client, since, until, limit, skip=frozenset()):
     Already-scored traces and traces in `skip` (given up) do not count against the limit."""
     todo, seen, total = [], set(), 0
     for page in iter_root_pages(os_client, since, until):
-        page = [r for r in page if r["traceId"] not in seen]  # one root per traceId
-        seen.update(r["traceId"] for r in page)
+        unique = []
+        for r in page:  # one root per traceId, deduping within a page as well as across pages
+            if r["traceId"] not in seen:
+                seen.add(r["traceId"])
+                unique.append(r)
+        page = unique
         total += len(page)
         done = already_scored(os_client, [r["traceId"] for r in page])
         for r in page:
@@ -303,14 +307,52 @@ def judge(br, item, model_id):
     return verdict, usage.get("inputTokens", 0), usage.get("outputTokens", 0), txt
 
 
+VERDICT_KEYS = ("correct", "relevant", "helpful", "hallucination")
+
+
+def json_objects(txt):
+    """Every balanced, parseable top-level {...} object in txt, in order (quotes and escapes respected)."""
+    objs, depth, start, in_str, esc = [], 0, None, False, False
+    for i, ch in enumerate(txt):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    objs.append(json.loads(txt[start:i + 1]))
+                except Exception:
+                    pass
+                start = None
+    return objs
+
+
 def parse_verdict(txt):
-    """JSON if it parses; otherwise pull the fields out by regex (unescaped quotes in `reason`, prose around the JSON)."""
-    start, end = txt.find("{"), txt.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            return json.loads(txt[start:end + 1])
-        except Exception:
-            pass
+    """Return the single verdict object. Ambiguous output -> {} so the caller rejects and retries:
+    the judge sometimes shows a passing example object before its real (failing) verdict, and taking the first
+    regex match would score the wrong one. If exactly one JSON verdict parses, use it; if several do, reject.
+    Otherwise (unescaped quote in `reason`, truncation) fall back to regex, but only when the fields are unambiguous."""
+    verdicts = [o for o in json_objects(txt) if isinstance(o, dict) and any(k in o for k in VERDICT_KEYS)]
+    if len(verdicts) == 1:
+        return verdicts[0]
+    if len(verdicts) > 1:
+        return {}  # more than one candidate verdict: ambiguous
+    # no complete JSON object parsed; reject if a score key appears more than once with differing values
+    for k in ("correct", "relevant", "helpful"):
+        if len({m.group(1) for m in re.finditer(rf'"{k}"\s*:\s*([0-9.]+)', txt)}) > 1:
+            return {}
     v = {}
     for k in ("correct", "relevant", "helpful"):
         m = re.search(rf'"{k}"\s*:\s*([0-9.]+)', txt)
@@ -435,6 +477,20 @@ def run_once(os_client, br, args, run_id, since, until, give_up):
     return len(todo) - len(failed), next_since, not exhausted
 
 
+def drive(do_pass, loop, dry_run, sleep=time.sleep):
+    """Run evaluation passes. One-shot (loop falsy): exactly one pass, so --limit caps the total scored and any larger
+    backlog is left for the next invocation. Continuous (loop > 0): keep going while a backlog remains, otherwise wait
+    `loop` seconds for new conversations. do_pass() -> (scored, backlog_remains). Returns the total scored."""
+    total = 0
+    while True:
+        scored, backlog = do_pass()
+        total += scored
+        if dry_run or not loop:
+            return total
+        if not backlog:
+            sleep(loop)
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # answers can contain any script
     ap = argparse.ArgumentParser()
@@ -442,7 +498,7 @@ def main():
     ap.add_argument("--since", required=True, help="ISO time, e.g. 2026-11-18T02:10:00Z")
     ap.add_argument("--until", default=None, help="ISO time; default = now minus --settle seconds")
     ap.add_argument("--settle", type=int, default=120, help="only score conversations older than this many seconds, so all child spans have landed")
-    ap.add_argument("--limit", type=int, default=5000, help="max conversations scored per pass; the rest are scored on the next pass")
+    ap.add_argument("--limit", type=int, default=5000, help="one-shot run: total conversations to score, then stop (a larger backlog is left for the next run). With --loop: the per-pass batch size")
     ap.add_argument("--max-retry-passes", type=int, default=5, help="give up on a conversation after it fails on this many passes")
     ap.add_argument("--judge-model", default=JUDGE_MODEL)
     ap.add_argument("--workers", type=int, default=4)
@@ -462,15 +518,15 @@ def main():
     if not args.dry_run:
         log(f"index {EVAL_INDEX}: {'created' if ensure_index(os_client) else 'exists'}")
     log(f"run {run_id}  judge={args.judge_model}  workers={args.workers}")
-    since, give_up = args.since, set()
-    while True:
+    state, give_up = {"since": args.since}, set()
+
+    def do_pass():
         until = args.until or (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=args.settle)).isoformat()
-        n, since, backlog = run_once(os_client, br, args, run_id, since, until, give_up)
-        log(f"pass done: {n} new score documents; next window starts {since}")
-        if args.dry_run or (not args.loop and not backlog):
-            break
-        if not backlog:  # caught up: wait for new conversations; with a backlog, continue immediately
-            time.sleep(args.loop)
+        n, state["since"], backlog = run_once(os_client, br, args, run_id, state["since"], until, give_up)
+        log(f"pass done: {n} new score documents; next window starts {state['since']}")
+        return n, backlog
+
+    drive(do_pass, args.loop, args.dry_run)
 
 
 if __name__ == "__main__":
